@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Upload, Trash2, Download, Ruler,
   FlipHorizontal, Layers, Settings2,
@@ -6,105 +6,13 @@ import {
   ZoomIn, ZoomOut, Info, RotateCcw, RotateCw, Maximize2
 } from 'lucide-react';
 
-// ─────────────────────────────────────────────
-// CONSTANTES GLOBALES
-// ─────────────────────────────────────────────
-const DEFAULT_W    = 1400;
-const DEFAULT_H    = 2200;
-const FLOOR_MARGIN = 200;   // px canvas sous la ligne de sol
-const CM_TO_PX     = 8;     // 1 cm = 8 px canvas
-const MAX_CM       = 230;
-const SNAP_Y       = 15;    // seuil snap-to-floor (px canvas)
-const MAX_HIST     = 60;
-const DEFAULT_ZOOM = 0.38;
+import { DEFAULT_W, DEFAULT_H, FLOOR_MARGIN, SNAP_Y, MAX_HIST, DEFAULT_ZOOM } from '../domain/constants.js';
+import { getBaseDimensions } from '../domain/geometry.js';
+import NumField from '../components/inspector/NumField.jsx';
+import Grid from '../components/canvas/Grid.jsx';
+import FormatDialog from '../components/dialogs/FormatDialog.jsx';
+import StatusBar from '../components/status/StatusBar.jsx';
 
-const FORMAT_PRESETS = [
-  { label: 'Portrait (Standard)', w: 1400, h: 2200 },
-  { label: 'Portrait Large',  w: 1800, h: 2400 },
-  { label: 'Paysage 2 pers.', w: 2800, h: 2200 },
-  { label: 'Paysage 4 pers.', w: 4000, h: 2200 },
-  { label: 'Bannière',        w: 5600, h: 2200 },
-];
-
-// ─────────────────────────────────────────────
-// COMPOSANT : Champ numérique style Figma
-// ─────────────────────────────────────────────
-const NumField = ({ value, onChange, onCommit, unit = '', min, max, step = 1, label, decimals = 0 }) => {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft]     = useState('');
-  const inputRef              = useRef(null);
-
-  const fmt   = (v) => decimals > 0 ? Number(v).toFixed(decimals) : String(Math.round(v));
-  const clamp = (v) => {
-    let n = parseFloat(v);
-    if (isNaN(n)) return value;
-    if (min !== undefined) n = Math.max(min, n);
-    if (max !== undefined) n = Math.min(max, n);
-    return n;
-  };
-
-  const commit = () => {
-    const finalVal = clamp(draft);
-    onChange(finalVal);
-    if (onCommit) onCommit(finalVal);
-    setEditing(false);
-  };
-
-  const startEdit = () => {
-    setDraft(fmt(value));
-    setEditing(true);
-    setTimeout(() => { inputRef.current?.select(); }, 0);
-  };
-
-  const onWheel = (e) => {
-    e.preventDefault();
-    const s = e.shiftKey ? step * 10 : step;
-    const nextVal = clamp(value + (e.deltaY < 0 ? s : -s));
-    onChange(nextVal);
-    if (onCommit) onCommit(nextVal);
-  };
-
-  return (
-    <div className="flex flex-col gap-0.5">
-      {label && <span className="text-[10px] text-gray-500 uppercase tracking-wider">{label}</span>}
-      <div
-        className="relative flex items-center bg-[#1e1e1e] border border-gray-700 rounded
-                   hover:border-gray-500 focus-within:border-emerald-500 transition-colors h-8"
-        onWheel={onWheel}
-      >
-        {editing ? (
-          <input
-            ref={inputRef}
-            type="number"
-            value={draft}
-            step={step}
-            onChange={e => {
-              const valStr = e.target.value;
-              setDraft(valStr);
-              const parsed = parseFloat(valStr);
-              if (!isNaN(parsed)) {
-                // Mise à jour instantanée pendant la saisie
-                onChange(parsed);
-              }
-            }}
-            onBlur={commit}
-            onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setEditing(false); }}
-            className="w-full bg-transparent text-center text-xs font-mono text-white outline-none px-1"
-            autoFocus
-          />
-        ) : (
-          <div
-            onClick={startEdit}
-            className="w-full text-center text-xs font-mono text-white cursor-text py-1 px-1 select-none"
-            title="Cliquer pour éditer · Molette pour incrémenter"
-          >
-            {fmt(value)}{unit && <span className="text-gray-500 ml-0.5 text-[10px]">{unit}</span>}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
 
 // ─────────────────────────────────────────────
 // COMPOSANT PRINCIPAL
@@ -133,12 +41,8 @@ const MugshotStudio = () => {
   const [isSnapping, setIsSnapping] = useState(false);
 
   const [zoom, setZoom] = useState(DEFAULT_ZOOM);
-  const [mousePos, setMousePos] = useState({ x: 0, yCm: 0 });
 
   const [showSettings, setShowSettings] = useState(false);
-  const [tempW, setTempW] = useState(DEFAULT_W);
-  const [tempH, setTempH] = useState(DEFAULT_H);
-
   const workspaceRef = useRef(null);
   const containerRef = useRef(null);
 
@@ -224,14 +128,6 @@ const MugshotStudio = () => {
     });
   }, [pushHistory]);
 
-  const getUnscaledDimensions = (s) => {
-    const naturalW = s.naturalW || 300;
-    const naturalH = s.naturalH || 600;
-    const maxH = floorY * 0.95;
-    const unscaledH = Math.min(naturalH, maxH);
-    const unscaledW = naturalW * (unscaledH / naturalH);
-    return { w: unscaledW, h: unscaledH };
-  };
 
   // ─────────────────────────────────────────────
   // IMPORTATION
@@ -287,7 +183,7 @@ const MugshotStudio = () => {
     e.currentTarget.setPointerCapture(e.pointerId);
     pushHistory(subjects);
     const s = subjects.find(x => x.id === id);
-    const { h: unscaledH } = getUnscaledDimensions(s);
+    const { h: unscaledH } = getBaseDimensions(s, floorY);
     setResizeInfo({
       id,
       handleType,
@@ -313,14 +209,14 @@ const MugshotStudio = () => {
     } else if (resizeInfo) {
       const s = subjects.find(x => x.id === resizeInfo.id);
       if (!s) return;
-      const { h: unscaledH } = getUnscaledDimensions(s);
+      const { h: unscaledH } = getBaseDimensions(s, floorY);
       const dy = (resizeInfo.startY - e.clientY) / zoom;
       let newH = resizeInfo.initH + dy;
       newH = Math.max(50, newH); 
       const newScale = newH / unscaledH;
       updateSubject(resizeInfo.id, { scale: newScale });
     }
-  }, [dragInfo, resizeInfo, zoom, canvasW, subjects, updateSubject]);
+  }, [dragInfo, resizeInfo, zoom, canvasW, floorY, subjects, updateSubject]);
 
   const onDragUp = useCallback(() => { 
     setDragInfo(null); 
@@ -369,13 +265,6 @@ const MugshotStudio = () => {
     };
   }, [panInfo, onPanMove, onPanUp]);
 
-  const onContainerMouseMove = (e) => {
-    if (!workspaceRef.current) return;
-    const r  = workspaceRef.current.getBoundingClientRect();
-    const cx = (e.clientX - r.left) / zoom;
-    const cy = (floorY - (e.clientY - r.top) / zoom) / CM_TO_PX;
-    setMousePos({ x: Math.round(cx), yCm: Math.round(cy) });
-  };
 
   useEffect(() => {
     const el = containerRef.current;
@@ -499,93 +388,23 @@ const MugshotStudio = () => {
     setSelectedId(was);
   };
 
-  // ─────────────────────────────────────────────
-  // RENDER GRILLE SVG
-  // ─────────────────────────────────────────────
-  const renderGrid = () => {
-    const els = [], cw = canvasW;
-    for (let cm = 0; cm <= MAX_CM; cm += 2) {
-      const major = cm % 10 === 0, mid = cm % 5 === 0 && !major;
-      const y = floorY - cm * CM_TO_PX;
-      if (major) {
-        els.push(<line key={`cl${cm}`} x1="130" y1={y} x2={cw-130} y2={y} stroke="#222" strokeWidth="2"/>);
-        els.push(<text key={`ctl${cm}`} x="122" y={y+6} fontSize="22" fill="#000" fontWeight="bold" textAnchor="end">{cm}</text>);
-        els.push(<text key={`ctr${cm}`} x={cw-122} y={y+6} fontSize="22" fill="#000" fontWeight="bold" textAnchor="start">{cm}</text>);
-      } else if (mid) {
-        els.push(<line key={`ml${cm}`} x1="130" y1={y} x2="162" y2={y} stroke="#555" strokeWidth="1.2"/>);
-        els.push(<line key={`mr${cm}`} x1={cw-130} y1={y} x2={cw-162} y2={y} stroke="#555" strokeWidth="1.2"/>);
-      } else {
-        els.push(<line key={`sl${cm}`} x1="130" y1={y} x2="147" y2={y} stroke="#aaa" strokeWidth="0.8"/>);
-        els.push(<line key={`sr${cm}`} x1={cw-130} y1={y} x2={cw-147} y2={y} stroke="#aaa" strokeWidth="0.8"/>);
-      }
-    }
-    const maxIn = Math.floor(MAX_CM / 2.54);
-    for (let i = 0; i <= maxIn; i++) {
-      const y = floorY - i * 2.54 * CM_TO_PX, ft = i % 12 === 0, foot = Math.floor(i/12), rem = i%12;
-      const tl = ft ? 36 : i%6===0 ? 22 : 12;
-      els.push(<line key={`il${i}`} x1={80-tl} y1={y} x2="80" y2={y} stroke="#000" strokeWidth={ft?2:0.8}/>);
-      els.push(<line key={`ir${i}`} x1={cw-80} y1={y} x2={cw-80+tl} y2={y} stroke="#000" strokeWidth={ft?2:0.8}/>);
-      if (ft) {
-        els.push(<text key={`fl${i}`} x="38" y={y+7} fontSize="26" fill="#000" fontWeight="900" textAnchor="middle">{foot}'</text>);
-        els.push(<text key={`fr${i}`} x={cw-38} y={y+7} fontSize="26" fill="#000" fontWeight="900" textAnchor="middle">{foot}'</text>);
-      } else if (i%3===0 && rem>0) {
-        els.push(<text key={`inl${i}`} x="40" y={y+5} fontSize="13" fill="#555" textAnchor="middle">{rem}"</text>);
-        els.push(<text key={`inr${i}`} x={cw-40} y={y+5} fontSize="13" fill="#555" textAnchor="middle">{rem}"</text>);
-      }
-    }
-    return els;
-  };
 
   const active     = subjects.find(s => s.id === selectedId);
   const canUndo    = historyIdx > 0;
   const canRedo    = historyIdx < history.length - 1;
   const isPanning  = !!panInfo || isSpacePressed;
 
-  // ─────────────────────────────────────────────
-  // MODAL CHOIX DU FORMAT
-  // ─────────────────────────────────────────────
-  const CanvasModal = () => (
-    <div className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center" onClick={() => setShowSettings(false)}>
-      <div className="bg-[#1c1c1c] border border-gray-700 rounded-xl p-6 w-[26rem] shadow-2xl" onClick={e => e.stopPropagation()}>
-        <h2 className="text-sm font-bold text-white mb-5 flex items-center gap-2">
-          <Maximize2 size={14} className="text-emerald-400"/> Format de la planche
-        </h2>
-        <div className="grid grid-cols-1 gap-1.5 mb-5">
-          {FORMAT_PRESETS.map(p => (
-            <button key={p.label} onClick={() => { setTempW(p.w); setTempH(p.h); }}
-              className={`text-xs px-3 py-2.5 rounded border text-left transition flex justify-between items-center ${
-                tempW===p.w && tempH===p.h ? 'bg-emerald-900/40 border-emerald-700 text-emerald-300' : 'bg-gray-800/60 border-gray-700 hover:bg-gray-700 text-gray-300'
-              }`}>
-              <span className="font-semibold">{p.label}</span>
-              <span className="text-gray-500 font-mono text-[10px]">{p.w} × {p.h}</span>
-            </button>
-          ))}
-        </div>
-        <div className="grid grid-cols-2 gap-3 mb-2">
-          <div>
-            <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 block">Largeur px</label>
-            <input type="number" value={tempW} min={600} max={8000} onChange={e => setTempW(+e.target.value||DEFAULT_W)}
-              className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1.5 text-xs font-mono outline-none focus:border-emerald-500 text-white"/>
-          </div>
-          <div>
-            <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 block">Hauteur px</label>
-            <input type="number" value={tempH} min={800} max={6000} onChange={e => setTempH(+e.target.value||DEFAULT_H)}
-              className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1.5 text-xs font-mono outline-none focus:border-emerald-500 text-white"/>
-          </div>
-        </div>
-        <p className="text-[10px] text-gray-600 mb-5">Les sujets existants ne sont pas déplacés.</p>
-        <div className="flex gap-2">
-          <button onClick={() => setShowSettings(false)} className="flex-1 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-xs py-2 rounded transition text-gray-300">Annuler</button>
-          <button onClick={() => { setCanvasW(tempW); setCanvasH(tempH); setShowSettings(false); }}
-            className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-xs py-2 rounded font-semibold transition text-white">Appliquer</button>
-        </div>
-      </div>
-    </div>
-  );
 
   return (
     <div className="flex h-screen bg-[#0d0d0d] text-gray-200 font-sans overflow-hidden select-none">
-      {showSettings && <CanvasModal/>}
+      {showSettings && (
+        <FormatDialog
+          canvasW={canvasW}
+          canvasH={canvasH}
+          onApply={(w, h) => { setCanvasW(w); setCanvasH(h); setShowSettings(false); }}
+          onCancel={() => setShowSettings(false)}
+        />
+      )}
 
       {/* ══ ZONE PRINCIPALE ══ */}
       <div className="flex-1 flex flex-col h-full min-w-0">
@@ -615,7 +434,7 @@ const MugshotStudio = () => {
             </div>
 
             {/* Ajustement Format */}
-            <button onClick={() => { setTempW(canvasW); setTempH(canvasH); setShowSettings(true); }}
+            <button onClick={() => setShowSettings(true)}
               className="flex items-center gap-1.5 bg-gray-800 hover:bg-gray-700 border border-gray-700 px-3 py-1.5 rounded-md text-xs transition">
               <Maximize2 size={12}/> Format
             </button>
@@ -649,7 +468,6 @@ const MugshotStudio = () => {
               }
             }
           }}
-          onMouseMove={onContainerMouseMove}
           onDoubleClick={handleDoubleClickBackground}
         >
           {/* Canvas de montage transformable */}
@@ -663,30 +481,14 @@ const MugshotStudio = () => {
               transformOrigin: 'center center' 
             }}
           >
-            {/* SVG Grille d'alignement */}
-            <svg className="absolute inset-0 pointer-events-none"
-              width={canvasW} height={canvasH} viewBox={`0 0 ${canvasW} ${canvasH}`}>
-              <text x={canvasW/2} y="60" fontSize="38" fill="#111" fontWeight="900"
-                textAnchor="middle" fontFamily="Impact,sans-serif" letterSpacing="3">
-                MUGSHOT STUDIO — PLANCHE DE TAILLE
-              </text>
-              <text x="120" y="55" fontSize="16" fill="#333" fontWeight="bold">FEET / IN</text>
-              <text x={canvasW-120} y="55" fontSize="16" fill="#333" fontWeight="bold" textAnchor="end">FEET / IN</text>
-              <text x="120" y="76" fontSize="16" fill="#333">CM</text>
-              <text x={canvasW-120} y="76" fontSize="16" fill="#333" textAnchor="end">CM</text>
-              <text x={canvasW/2} y={canvasH-10} fontSize="14" fill="#aaa" textAnchor="middle">{canvasW} × {canvasH} px</text>
-              {renderGrid()}
-              <rect x="0" y={floorY} width={canvasW} height={canvasH-floorY} fill="#c8c8cc"/>
-              <line x1="0" y1={floorY} x2={canvasW} y2={floorY} stroke="#000" strokeWidth="6"/>
-              <text x={canvasW/2} y={floorY+34} fontSize="24" fill="#333" fontWeight="bold" textAnchor="middle">▲ SOL — 0 cm ▲</text>
-            </svg>
+            <Grid canvasW={canvasW} canvasH={canvasH} />
 
             {/* AFFICHAGE DES SUJETS (IMAGES PNG TRANSPARENTES) */}
             {subjects.map(s => {
               const sel  = selectedId === s.id;
               const drag = dragInfo?.id === s.id;
               
-              const { w: unscaledW, h: unscaledH } = getUnscaledDimensions(s);
+              const { w: unscaledW, h: unscaledH } = getBaseDimensions(s, floorY);
               
               return (
                 <div key={s.id}
@@ -755,16 +557,15 @@ const MugshotStudio = () => {
           </div>
         </div>
 
-        {/* Barre d'état du bas */}
-        <footer className="h-8 border-t border-gray-800 bg-[#111] flex items-center px-4 gap-5 text-[11px] text-gray-600 shrink-0">
-          <span>X <span className="text-gray-400 font-mono">{mousePos.x}px</span></span>
-          <span>H <span className="text-emerald-500 font-mono">{Math.max(0, mousePos.yCm)} cm</span></span>
-          <span>Sujets <strong className="text-gray-300">{subjects.length}</strong></span>
-          <span>Résolution : {canvasW}×{canvasH} px</span>
-          <span className="ml-auto">
-            Mode Panning : Espace + Glisser ou Clic Fond · Redimensionnement Manuel : Glisser les poignées vertes
-          </span>
-        </footer>
+        <StatusBar
+          containerRef={containerRef}
+          workspaceRef={workspaceRef}
+          zoom={zoom}
+          floorY={floorY}
+          subjectCount={subjects.length}
+          canvasW={canvasW}
+          canvasH={canvasH}
+        />
       </div>
 
       {/* ══ CONTRÔLES DE L'INSPECTEUR (PANNEAU DROIT) ══ */}
