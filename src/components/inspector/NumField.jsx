@@ -1,9 +1,10 @@
 import { useState, useRef } from 'react';
 
-const NumField = ({ value, onChange, onCommit, unit = '', min, max, step = 1, label, decimals = 0 }) => {
+const NumField = ({ value, onChange, onCommit, onCancel, unit = '', min, max, step = 1, label, decimals = 0 }) => {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const inputRef = useRef(null);
+  const touched = useRef(false);
 
   const fmt = (v) => decimals > 0 ? Number(v).toFixed(decimals) : String(Math.round(v));
   const clamp = (v) => {
@@ -15,13 +16,22 @@ const NumField = ({ value, onChange, onCommit, unit = '', min, max, step = 1, la
   };
 
   const commit = () => {
+    setEditing(false);
+    if (!touched.current) return;
+    touched.current = false;
     const finalVal = clamp(draft);
     onChange(finalVal);
     if (onCommit) onCommit(finalVal);
+  };
+
+  const cancel = () => {
+    touched.current = false;
     setEditing(false);
+    if (onCancel) onCancel();
   };
 
   const startEdit = () => {
+    touched.current = false;
     setDraft(fmt(value));
     setEditing(true);
     setTimeout(() => { inputRef.current?.select(); }, 0);
@@ -50,6 +60,7 @@ const NumField = ({ value, onChange, onCommit, unit = '', min, max, step = 1, la
             value={draft}
             step={step}
             onChange={e => {
+              touched.current = true;
               const valStr = e.target.value;
               setDraft(valStr);
               const parsed = parseFloat(valStr);
@@ -58,7 +69,7 @@ const NumField = ({ value, onChange, onCommit, unit = '', min, max, step = 1, la
               }
             }}
             onBlur={commit}
-            onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setEditing(false); }}
+            onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') cancel(); }}
             className="w-full bg-transparent text-center text-xs font-mono text-white outline-none px-1"
             autoFocus
           />
