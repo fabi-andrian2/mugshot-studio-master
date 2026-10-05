@@ -1,12 +1,15 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Upload } from 'lucide-react';
 
-import { DEFAULT_W, DEFAULT_H, FLOOR_MARGIN, SNAP_Y, MAX_HIST, DEFAULT_ZOOM } from '../domain/constants.js';
+import { DEFAULT_W, DEFAULT_H, FLOOR_MARGIN, SNAP_Y, MAX_HIST } from '../domain/constants.js';
 import { getBaseDimensions } from '../domain/geometry.js';
 import { areSubjectListsEqual } from '../domain/subjects.js';
+import { renderBoard, downloadCanvasAsPng } from '../services/export.js';
 import useHistory from '../hooks/useHistory.js';
+import useCanvasNavigation from '../hooks/useCanvasNavigation.js';
 import Toolbar from '../components/toolbar/Toolbar.jsx';
 import Grid from '../components/canvas/Grid.jsx';
+import SubjectView from '../components/canvas/SubjectView.jsx';
 import Inspector from '../components/inspector/Inspector.jsx';
 import LayersPanel from '../components/layers/LayersPanel.jsx';
 import FormatDialog from '../components/dialogs/FormatDialog.jsx';
@@ -38,58 +41,25 @@ const MugshotStudio = () => {
 
   const [dragInfo, setDragInfo] = useState(null);
   const [resizeInfo, setResizeInfo] = useState(null);
-
-  const [panX, setPanX] = useState(0);
-  const [panY, setPanY] = useState(0);
-  const [panInfo, setPanInfo] = useState(null);
-
-  const [isSpacePressed, setIsSpacePressed] = useState(false);
   const [isSnapping, setIsSnapping] = useState(false);
-
-  const [zoom, setZoom] = useState(DEFAULT_ZOOM);
 
   const [showSettings, setShowSettings] = useState(false);
 
   const workspaceRef = useRef(null);
   const containerRef = useRef(null);
 
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.code === 'Space' && e.target.tagName !== 'INPUT') {
-        e.preventDefault();
-        setIsSpacePressed(true);
-      }
-    };
-    const handleKeyUp = (e) => {
-      if (e.code === 'Space') {
-        setIsSpacePressed(false);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-    };
-  }, []);
-
-  const resetView = useCallback(() => {
-    setZoom(DEFAULT_ZOOM);
-    setPanX(0);
-    setPanY(0);
-  }, []);
-
-  const handleDoubleClickBackground = useCallback((e) => {
-    if (e.target === containerRef.current || e.target === workspaceRef.current) {
-      if (zoom !== DEFAULT_ZOOM || panX !== 0 || panY !== 0) {
-        resetView();
-      } else {
-        setZoom(0.8);
-        setPanX(0);
-        setPanY(0);
-      }
-    }
-  }, [zoom, panX, panY, resetView]);
+  const {
+    zoom,
+    panX,
+    panY,
+    isSpacePressed,
+    isPanning,
+    zoomIn,
+    zoomOut,
+    resetView,
+    startPan,
+    onBackgroundDoubleClick,
+  } = useCanvasNavigation({ containerRef, workspaceRef });
 
   const gestureActive = !!dragInfo || !!resizeInfo;
 
@@ -222,54 +192,6 @@ const MugshotStudio = () => {
     };
   }, [dragInfo, resizeInfo, onDragMove, onDragUp]);
 
-  const startPan = (e) => {
-    if (e.button !== 0) return;
-    setPanInfo({
-      startX: e.clientX,
-      startY: e.clientY,
-      initPanX: panX,
-      initPanY: panY
-    });
-  };
-
-  const onPanMove = useCallback((e) => {
-    if (!panInfo) return;
-    setPanX(panInfo.initPanX + (e.clientX - panInfo.startX));
-    setPanY(panInfo.initPanY + (e.clientY - panInfo.startY));
-  }, [panInfo]);
-
-  const onPanUp = useCallback(() => setPanInfo(null), []);
-
-  useEffect(() => {
-    if (!panInfo) return;
-    window.addEventListener('mousemove', onPanMove);
-    window.addEventListener('mouseup',   onPanUp);
-    return () => {
-      window.removeEventListener('mousemove', onPanMove);
-      window.removeEventListener('mouseup', onPanUp);
-    };
-  }, [panInfo, onPanMove, onPanUp]);
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const block = e => e.preventDefault();
-    el.addEventListener('contextmenu', block);
-    return () => el.removeEventListener('contextmenu', block);
-  }, []);
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const onWheel = (e) => {
-      if (!e.ctrlKey && !e.metaKey) return;
-      e.preventDefault();
-      setZoom(z => Math.max(0.1, Math.min(1.5, z + (e.deltaY < 0 ? 0.05 : -0.05))));
-    };
-    el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
-  }, []);
-
   useEffect(() => {
     const onKey = (e) => {
       const key = e.key.toLowerCase();
@@ -315,63 +237,21 @@ const MugshotStudio = () => {
   }, [selectedId, subjects, handleUndo, handleRedo, updateSubjectH, removeSubject]);
 
   const exportCanvas = async () => {
-    const was = selectedId;
-    setSelectedId(null);
-    await new Promise(r => setTimeout(r, 120));
     try {
-      const cv  = document.createElement('canvas');
-      cv.width  = canvasW; cv.height = canvasH;
-      const ctx = cv.getContext('2d');
-
-      ctx.fillStyle = '#f2f2f4';
-      ctx.fillRect(0, 0, canvasW, canvasH);
-
-      const svgEl = workspaceRef.current?.querySelector('svg');
-      if (svgEl) {
-        const blob = new Blob([new XMLSerializer().serializeToString(svgEl)], { type: 'image/svg+xml;charset=utf-8' });
-        const url  = URL.createObjectURL(blob);
-        await new Promise(res => {
-          const img = new Image();
-          img.onload = () => { ctx.drawImage(img, 0, 0, canvasW, canvasH); URL.revokeObjectURL(url); res(); };
-          img.src = url;
-        });
-      }
-
-      for (const s of [...subjects].sort((a, b) => a.zIndex - b.zIndex)) {
-        await new Promise(res => {
-          const img = new Image();
-          img.onload = () => {
-            const maxH = floorY * 0.95;
-            const unscaledH = Math.min(img.naturalHeight, maxH);
-            const unscaledW = img.naturalWidth * (unscaledH / img.naturalHeight);
-
-            const rW = unscaledW * s.scale;
-            const rH = unscaledH * s.scale;
-
-            const centerX = s.x + unscaledW / 2;
-            const centerY = floorY - s.y;
-
-            ctx.save();
-            ctx.translate(centerX, centerY);
-            if (s.flipX) ctx.scale(-1, 1);
-            ctx.drawImage(img, -rW / 2, -rH, rW, rH);
-            ctx.restore();
-            res();
-          };
-          img.src = s.url;
-        });
-      }
-
-      const a = document.createElement('a');
-      a.download = `Mugshot_Studio_${Date.now()}.png`;
-      a.href = cv.toDataURL('image/png');
-      a.click();
-    } catch (err) { console.error(err); }
-    setSelectedId(was);
+      const canvas = await renderBoard({
+        svgElement: workspaceRef.current?.querySelector('svg'),
+        subjects,
+        canvasW,
+        canvasH,
+        floorY,
+      });
+      downloadCanvasAsPng(canvas);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
-  const active    = subjects.find(s => s.id === selectedId);
-  const isPanning = !!panInfo || isSpacePressed;
+  const active = subjects.find(s => s.id === selectedId);
 
   return (
     <div className="flex h-screen bg-[#0d0d0d] text-gray-200 font-sans overflow-hidden select-none">
@@ -391,8 +271,8 @@ const MugshotStudio = () => {
           onUndo={handleUndo}
           onRedo={handleRedo}
           zoom={zoom}
-          onZoomIn={() => setZoom(z => Math.min(1.5, z + 0.06))}
-          onZoomOut={() => setZoom(z => Math.max(0.1, z - 0.06))}
+          onZoomIn={zoomIn}
+          onZoomOut={zoomOut}
           onResetView={resetView}
           onOpenFormat={() => setShowSettings(true)}
           onImport={handleFileUpload}
@@ -413,7 +293,7 @@ const MugshotStudio = () => {
               }
             }
           }}
-          onDoubleClick={handleDoubleClickBackground}
+          onDoubleClick={onBackgroundDoubleClick}
         >
           <div
             ref={workspaceRef}
@@ -427,63 +307,20 @@ const MugshotStudio = () => {
           >
             <Grid canvasW={canvasW} canvasH={canvasH} />
 
-            {subjects.map(s => {
-              const sel  = selectedId === s.id;
-              const drag = dragInfo?.id === s.id;
-
-              const { w: unscaledW, h: unscaledH } = getBaseDimensions(s, floorY);
-
-              return (
-                <div key={s.id}
-                  onMouseDown={e => e.stopPropagation()}
-                  onPointerDown={e => handleSubjectPointerDown(e, s.id)}
-                  onDoubleClick={e => handleSubjectDoubleClick(e, s.id)}
-                  className="absolute will-change-transform"
-                  style={{
-                    left: s.x,
-                    bottom: (canvasH - floorY) + s.y,
-                    width: unscaledW,
-                    height: unscaledH,
-                    transformOrigin: 'bottom center',
-                    transform: `scale(${s.scale}) scaleX(${s.flipX ? -1 : 1})`,
-                    zIndex: s.zIndex,
-                  }}
-                >
-                  <img src={s.url} alt={s.name} draggable="false"
-                    className="block pointer-events-none drop-shadow-2xl w-full h-full"
-                    onLoad={e => handleImageLoad(s.id, e.currentTarget.naturalWidth, e.currentTarget.naturalHeight)}
-                  />
-
-                  {sel && (
-                    <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 99999 }}>
-                      <div className="absolute inset-0 border-[3px] border-emerald-400 pointer-events-none" />
-
-                      <div
-                        onPointerDown={e => handleResizePointerDown(e, s.id, 'top-center')}
-                        className="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-white border-[3px] border-emerald-400 rounded-full cursor-ns-resize pointer-events-auto"
-                        title="Faire glisser pour redimensionner"
-                      />
-
-                      <div
-                        onPointerDown={e => handleResizePointerDown(e, s.id, 'top-left')}
-                        className="absolute -top-2 -left-2 w-4 h-4 bg-white border-[3px] border-emerald-400 rounded-full cursor-nwse-resize pointer-events-auto"
-                      />
-
-                      <div
-                        onPointerDown={e => handleResizePointerDown(e, s.id, 'top-right')}
-                        className="absolute -top-2 -right-2 w-4 h-4 bg-white border-[3px] border-emerald-400 rounded-full cursor-nesw-resize pointer-events-auto"
-                      />
-                    </div>
-                  )}
-
-                  {drag && isSnapping && (
-                    <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 bg-emerald-500 text-black text-[10px] font-black px-2 py-0.5 rounded whitespace-nowrap pointer-events-none z-50 shadow-md">
-                      📌 AIMANTÉ AU SOL
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+            {subjects.map(s => (
+              <SubjectView
+                key={s.id}
+                subject={s}
+                floorY={floorY}
+                canvasH={canvasH}
+                selected={selectedId === s.id}
+                showSnapBadge={dragInfo?.id === s.id && isSnapping}
+                onPointerDown={e => handleSubjectPointerDown(e, s.id)}
+                onDoubleClick={e => handleSubjectDoubleClick(e, s.id)}
+                onResizeStart={(e, handleType) => handleResizePointerDown(e, s.id, handleType)}
+                onImageLoad={(w, h) => handleImageLoad(s.id, w, h)}
+              />
+            ))}
 
             {subjects.length === 0 && (
               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none" style={{ paddingTop: canvasH * 0.25 }}>
