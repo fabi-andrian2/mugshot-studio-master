@@ -8,9 +8,11 @@ import {
   getScaleForGroundToTopPx,
   getAnchorUpdateForCanvasPoint,
   getHeadUpdateForCanvasPoint,
+  getSubjectHeightCm,
 } from '../domain/geometry.js';
 import { getAnnotationItems } from '../domain/annotations.js';
-import { clampScale } from '../domain/measurement.js';
+import { clampScale, formatHeight } from '../domain/measurement.js';
+import { arrangeSubjects, layoutOnImport } from '../domain/layout.js';
 import { areSubjectListsEqual, createSubject, renameSubject } from '../domain/subjects.js';
 import { renderBoard, downloadCanvasAsPng } from '../services/export.js';
 import { importImageFiles } from '../services/imageImport.js';
@@ -29,6 +31,9 @@ const HISTORY_OPTIONS = { isEqual: areSubjectListsEqual, limit: MAX_HIST, mergeW
 
 const isTextField = (el) =>
   el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && el.type !== 'range');
+
+const markManual = (upd) =>
+  Object.prototype.hasOwnProperty.call(upd, 'x') ? { ...upd, placement: 'manual' } : upd;
 
 const shiftScale = (subject, delta) =>
   clampScale(getMeasuredHeightPx(subject), subject.scale + delta);
@@ -72,6 +77,7 @@ const MugshotStudio = () => {
     zoomIn,
     zoomOut,
     resetView,
+    fitToScreen,
     startPan,
     onBackgroundDoubleClick,
   } = useCanvasNavigation({ containerRef, workspaceRef });
@@ -91,11 +97,11 @@ const MugshotStudio = () => {
   }, [gestureActive, redo]);
 
   const updateSubject = useCallback((id, upd) => {
-    setLive(list => list.map(s => s.id === id ? { ...s, ...upd } : s));
+    setLive(list => list.map(s => s.id === id ? { ...s, ...markManual(upd) } : s));
   }, [setLive]);
 
   const updateSubjectH = useCallback((id, upd, mergeKey) => {
-    apply(list => list.map(s => s.id === id ? { ...s, ...upd } : s), mergeKey);
+    apply(list => list.map(s => s.id === id ? { ...s, ...markManual(upd) } : s), mergeKey);
   }, [apply]);
 
   const handleFileUpload = useCallback(async (fileList) => {
@@ -107,12 +113,20 @@ const MugshotStudio = () => {
     apply(list => {
       const topZ = list.reduce((max, s) => Math.max(max, s.zIndex), 0);
       const created = images.map((image, i) =>
-        createSubject(image, { index: list.length + i, canvasW, zIndex: topZ + i + 1 }),
+        createSubject(image, { index: i, canvasW, zIndex: topZ + i + 1 }),
       );
-      return [...list, ...created];
+      return layoutOnImport(list, created, { canvasW, floorY });
     });
     setSelectedId(images[0].id);
-  }, [apply, canvasW]);
+  }, [apply, canvasW, floorY]);
+
+  const handleArrange = useCallback((command) => {
+    const result = arrangeSubjects(subjects, command, { canvasW, floorY });
+    apply(() => result.subjects);
+    if (!result.fits) {
+      window.alert('Les sujets ne tiennent pas dans ce format : ils se chevauchent. Choisis un format plus large.');
+    }
+  }, [subjects, apply, canvasW, floorY]);
 
   const handleDrop = (e) => {
     e.preventDefault();
@@ -299,11 +313,14 @@ const MugshotStudio = () => {
           onZoomIn={zoomIn}
           onZoomOut={zoomOut}
           onResetView={resetView}
+          onFit={() => fitToScreen(canvasW, canvasH)}
           unit={unit}
           onUnitChange={setUnit}
           annotations={annotations}
           onToggleAnnotations={() => setAnnotations(a => ({ ...a, enabled: !a.enabled }))}
           onScopeChange={(scope) => setAnnotations(a => ({ ...a, scope }))}
+          hasSubjects={subjects.length > 0}
+          onArrange={handleArrange}
           onOpenFormat={() => setShowSettings(true)}
           onImport={handleFileUpload}
           onExport={exportCanvas}
@@ -369,6 +386,7 @@ const MugshotStudio = () => {
           zoom={zoom}
           floorY={floorY}
           subjectCount={subjects.length}
+          selectionLabel={active ? `${active.name} · ${formatHeight(getSubjectHeightCm(active), unit)}` : ''}
           canvasW={canvasW}
           canvasH={canvasH}
         />

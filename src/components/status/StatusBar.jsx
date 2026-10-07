@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { CM_TO_PX } from '../../domain/constants.js';
 
-const StatusBar = ({ containerRef, workspaceRef, zoom, floorY, subjectCount, canvasW, canvasH }) => {
+const StatusBar = ({ containerRef, workspaceRef, zoom, floorY, subjectCount, selectionLabel, canvasW, canvasH }) => {
   const [mousePos, setMousePos] = useState({ x: 0, yCm: 0 });
 
   useEffect(() => {
@@ -25,8 +25,11 @@ const StatusBar = ({ containerRef, workspaceRef, zoom, floorY, subjectCount, can
       <span>H <span className="text-emerald-500 font-mono">{Math.max(0, mousePos.yCm)} cm</span></span>
       <span>Sujets <strong className="text-gray-300">{subjectCount}</strong></span>
       <span>Résolution : {canvasW}×{canvasH} px</span>
+      {selectionLabel && (
+        <span>Sélection <strong className="text-emerald-400 font-mono">{selectionLabel}</strong></span>
+      )}
       <span className="ml-auto">
-        Mode Panning : Espace + Glisser ou Clic Fond · Redimensionnement Manuel : Glisser les poignées vertes
+        Espace + glisser : naviguer · Ctrl + molette : zoom sur le curseur · Poignées vertes : hauteur · Repères ⊕ : pied (vert) et tête (bleu)
       </span>
     </footer>
   );
