@@ -1,14 +1,8 @@
-import { getBaseDimensions } from '../domain/geometry.js';
+import { getSubjectGeometry } from '../domain/geometry.js';
+import { ANNOTATION_STYLE } from '../domain/annotations.js';
+import loadImage from './loadImage.js';
 
 const BOARD_BACKGROUND = '#f2f2f4';
-
-const loadImage = (src) =>
-  new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error(`Chargement impossible : ${src}`));
-    img.src = src;
-  });
 
 const drawGrid = async (ctx, svgElement, canvasW, canvasH) => {
   const svgText = new XMLSerializer().serializeToString(svgElement);
@@ -23,20 +17,40 @@ const drawGrid = async (ctx, svgElement, canvasW, canvasH) => {
 };
 
 const drawSubject = (ctx, img, subject, floorY) => {
-  const base = getBaseDimensions({ naturalW: img.naturalWidth, naturalH: img.naturalHeight }, floorY);
-  const renderedW = base.w * subject.scale;
-  const renderedH = base.h * subject.scale;
-  const centerX = subject.x + base.w / 2;
-  const centerY = floorY - subject.y;
-
+  const { box, originX } = getSubjectGeometry(subject, floorY);
   ctx.save();
-  ctx.translate(centerX, centerY);
+  ctx.translate(box.left + originX, box.top);
   if (subject.flipX) ctx.scale(-1, 1);
-  ctx.drawImage(img, -renderedW / 2, -renderedH, renderedW, renderedH);
+  ctx.drawImage(img, -originX, 0, box.width, box.height);
   ctx.restore();
 };
 
-export const renderBoard = async ({ svgElement, subjects, canvasW, canvasH, floorY }) => {
+const drawAnnotations = (ctx, items) => {
+  items.forEach((item) => {
+    ctx.save();
+
+    ctx.strokeStyle = item.emphasized ? ANNOTATION_STYLE.accentColor : ANNOTATION_STYLE.lineColor;
+    ctx.lineWidth = ANNOTATION_STYLE.lineWidth;
+    ctx.beginPath();
+    ctx.moveTo(item.lineX1, item.lineY);
+    ctx.lineTo(item.lineX2, item.lineY);
+    ctx.stroke();
+
+    ctx.font = `bold ${ANNOTATION_STYLE.fontSize}px ${ANNOTATION_STYLE.fontFamily}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = ANNOTATION_STYLE.haloWidth;
+    ctx.strokeStyle = ANNOTATION_STYLE.haloColor;
+    ctx.strokeText(item.text, item.labelX, item.labelY);
+    ctx.fillStyle = item.emphasized ? ANNOTATION_STYLE.accentColor : ANNOTATION_STYLE.textColor;
+    ctx.fillText(item.text, item.labelX, item.labelY);
+
+    ctx.restore();
+  });
+};
+
+export const renderBoard = async ({ svgElement, subjects, annotations = [], canvasW, canvasH, floorY }) => {
   const canvas = document.createElement('canvas');
   canvas.width = canvasW;
   canvas.height = canvasH;
@@ -54,6 +68,8 @@ export const renderBoard = async ({ svgElement, subjects, canvasW, canvasH, floo
     const img = await loadImage(subject.url);
     drawSubject(ctx, img, subject, floorY);
   }
+
+  drawAnnotations(ctx, annotations);
 
   return canvas;
 };

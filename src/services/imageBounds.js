@@ -1,8 +1,10 @@
 import { IMAGE_ANALYSIS_MAX_SIDE, ALPHA_THRESHOLD } from '../domain/constants.js';
-import { findOpaqueBounds } from '../domain/opaqueBounds.js';
+import { findOpaqueBounds, estimateGroundAnchor, estimateHeadAnchor } from '../domain/opaqueBounds.js';
 import loadImage from './loadImage.js';
 
 const FULL_BOUNDS = { left: 0, top: 0, right: 1, bottom: 1 };
+const FULL_GROUND = { x: 0.5, y: 1 };
+const FULL_HEAD = { x: 0.5, y: 0 };
 
 export const analyzeImage = async (src) => {
   const img = await loadImage(src);
@@ -23,10 +25,23 @@ export const analyzeImage = async (src) => {
   const { data } = ctx.getImageData(0, 0, width, height);
   const bounds = findOpaqueBounds(data, width, height, ALPHA_THRESHOLD);
 
+  if (!bounds) {
+    return {
+      naturalW,
+      naturalH,
+      visibleBounds: FULL_BOUNDS,
+      groundAnchor: FULL_GROUND,
+      headAnchor: FULL_HEAD,
+      isEmpty: true,
+    };
+  }
+
   return {
     naturalW,
     naturalH,
-    visibleBounds: bounds ?? FULL_BOUNDS,
-    isEmpty: bounds === null,
+    visibleBounds: bounds,
+    groundAnchor: estimateGroundAnchor(data, width, height, ALPHA_THRESHOLD, bounds),
+    headAnchor: estimateHeadAnchor(data, width, height, ALPHA_THRESHOLD, bounds),
+    isEmpty: false,
   };
 };

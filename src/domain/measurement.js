@@ -3,20 +3,20 @@ import { CM_TO_PX, CM_PER_INCH, MIN_HEIGHT_CM, MAX_HEIGHT_CM } from './constants
 export const cmToPx = (cm) => cm * CM_TO_PX;
 export const pxToCm = (px) => px / CM_TO_PX;
 
-export const heightCmFromScale = (visibleHeightPx, scale) => pxToCm(visibleHeightPx * scale);
+export const heightCmFromScale = (measuredHeightPx, scale) => pxToCm(measuredHeightPx * scale);
 
-export const scaleFromHeightCm = (visibleHeightPx, heightCm) =>
-  visibleHeightPx > 0 ? cmToPx(heightCm) / visibleHeightPx : 1;
+export const scaleFromHeightCm = (measuredHeightPx, heightCm) =>
+  measuredHeightPx > 0 ? cmToPx(heightCm) / measuredHeightPx : 1;
 
 export const clampHeightCm = (heightCm) => Math.max(MIN_HEIGHT_CM, Math.min(MAX_HEIGHT_CM, heightCm));
 
-export const getScaleLimits = (visibleHeightPx) => ({
-  min: scaleFromHeightCm(visibleHeightPx, MIN_HEIGHT_CM),
-  max: scaleFromHeightCm(visibleHeightPx, MAX_HEIGHT_CM),
+export const getScaleLimits = (measuredHeightPx) => ({
+  min: scaleFromHeightCm(measuredHeightPx, MIN_HEIGHT_CM),
+  max: scaleFromHeightCm(measuredHeightPx, MAX_HEIGHT_CM),
 });
 
-export const clampScale = (visibleHeightPx, scale) => {
-  const { min, max } = getScaleLimits(visibleHeightPx);
+export const clampScale = (measuredHeightPx, scale) => {
+  const { min, max } = getScaleLimits(measuredHeightPx);
   return Math.max(min, Math.min(max, scale));
 };
 
@@ -26,6 +26,13 @@ export const inchesToCm = (inches) => inches * CM_PER_INCH;
 export const cmToFeetInches = (cm) => {
   const totalInches = Math.round(cmToInches(cm));
   return { feet: Math.floor(totalInches / 12), inches: totalInches % 12 };
+};
+
+export const splitFeetInches = (cm) => {
+  const totalInches = Math.round(cmToInches(cm) * 10) / 10;
+  const feet = Math.floor(totalInches / 12);
+  const inches = Math.round((totalInches - feet * 12) * 10) / 10;
+  return { feet, inches };
 };
 
 export const feetInchesToCm = (feet, inches) => inchesToCm(feet * 12 + inches);

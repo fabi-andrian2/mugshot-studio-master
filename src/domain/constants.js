@@ -15,8 +15,10 @@ export const SUBJECT_STAGGER_PX = 50;
 
 export const IMAGE_ANALYSIS_MAX_SIDE = 1024;
 export const ALPHA_THRESHOLD = 20;
+export const FOOT_BAND_RATIO = 0.05;
+export const HEAD_MIN_ROW_RATIO = 0.04;
+export const MIN_ANCHOR_SPAN = 0.02;
 
-export const MAX_BASE_HEIGHT_RATIO = 0.95;
 export const FALLBACK_NATURAL_W = 300;
 export const FALLBACK_NATURAL_H = 600;
 

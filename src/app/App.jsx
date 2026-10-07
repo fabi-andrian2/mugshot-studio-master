@@ -2,14 +2,24 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { Upload } from 'lucide-react';
 
 import { DEFAULT_W, DEFAULT_H, FLOOR_MARGIN, SNAP_Y, MAX_HIST } from '../domain/constants.js';
-import { getBaseDimensions } from '../domain/geometry.js';
-import { areSubjectListsEqual } from '../domain/subjects.js';
+import {
+  getSubjectGeometry,
+  getMeasuredHeightPx,
+  getScaleForGroundToTopPx,
+  getAnchorUpdateForCanvasPoint,
+  getHeadUpdateForCanvasPoint,
+} from '../domain/geometry.js';
+import { getAnnotationItems } from '../domain/annotations.js';
+import { clampScale } from '../domain/measurement.js';
+import { areSubjectListsEqual, createSubject, renameSubject } from '../domain/subjects.js';
 import { renderBoard, downloadCanvasAsPng } from '../services/export.js';
+import { importImageFiles } from '../services/imageImport.js';
 import useHistory from '../hooks/useHistory.js';
 import useCanvasNavigation from '../hooks/useCanvasNavigation.js';
 import Toolbar from '../components/toolbar/Toolbar.jsx';
 import Grid from '../components/canvas/Grid.jsx';
 import SubjectView from '../components/canvas/SubjectView.jsx';
+import AnnotationsLayer from '../components/canvas/AnnotationsLayer.jsx';
 import Inspector from '../components/inspector/Inspector.jsx';
 import LayersPanel from '../components/layers/LayersPanel.jsx';
 import FormatDialog from '../components/dialogs/FormatDialog.jsx';
@@ -19,6 +29,9 @@ const HISTORY_OPTIONS = { isEqual: areSubjectListsEqual, limit: MAX_HIST, mergeW
 
 const isTextField = (el) =>
   el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && el.type !== 'range');
+
+const shiftScale = (subject, delta) =>
+  clampScale(getMeasuredHeightPx(subject), subject.scale + delta);
 
 const MugshotStudio = () => {
   const [canvasW, setCanvasW] = useState(DEFAULT_W);
@@ -33,7 +46,6 @@ const MugshotStudio = () => {
     rollback,
     undo,
     redo,
-    patchAll,
     canUndo,
     canRedo,
   } = useHistory([], HISTORY_OPTIONS);
@@ -41,9 +53,12 @@ const MugshotStudio = () => {
 
   const [dragInfo, setDragInfo] = useState(null);
   const [resizeInfo, setResizeInfo] = useState(null);
+  const [anchorInfo, setAnchorInfo] = useState(null);
   const [isSnapping, setIsSnapping] = useState(false);
 
   const [showSettings, setShowSettings] = useState(false);
+  const [unit, setUnit] = useState('cm');
+  const [annotations, setAnnotations] = useState({ enabled: false, scope: 'selected' });
 
   const workspaceRef = useRef(null);
   const containerRef = useRef(null);
@@ -61,7 +76,7 @@ const MugshotStudio = () => {
     onBackgroundDoubleClick,
   } = useCanvasNavigation({ containerRef, workspaceRef });
 
-  const gestureActive = !!dragInfo || !!resizeInfo;
+  const gestureActive = !!dragInfo || !!resizeInfo || !!anchorInfo;
 
   const handleUndo = useCallback(() => {
     if (gestureActive) return;
@@ -83,32 +98,21 @@ const MugshotStudio = () => {
     apply(list => list.map(s => s.id === id ? { ...s, ...upd } : s), mergeKey);
   }, [apply]);
 
-  const handleImageLoad = useCallback((id, naturalW, naturalH) => {
-    patchAll(list => {
-      const needsPatch = list.some(s => s.id === id && (s.naturalW !== naturalW || s.naturalH !== naturalH));
-      return needsPatch
-        ? list.map(s => s.id === id ? { ...s, naturalW, naturalH } : s)
-        : list;
+  const handleFileUpload = useCallback(async (fileList) => {
+    const { images, failed } = await importImageFiles(fileList);
+    if (failed.length) {
+      window.alert(`Fichiers non importés (image invalide) :\n${failed.join('\n')}`);
+    }
+    if (!images.length) return;
+    apply(list => {
+      const topZ = list.reduce((max, s) => Math.max(max, s.zIndex), 0);
+      const created = images.map((image, i) =>
+        createSubject(image, { index: list.length + i, canvasW, zIndex: topZ + i + 1 }),
+      );
+      return [...list, ...created];
     });
-  }, [patchAll]);
-
-  const handleFileUpload = useCallback((files) => {
-    const arr = Array.from(files).map((f, i) => ({
-      id: Date.now() + Math.random(),
-      url: URL.createObjectURL(f),
-      x: (canvasW / 2) - 150 + (subjects.length + i) * 50,
-      y: 0,
-      scale: 0.8,
-      flipX: false,
-      zIndex: subjects.length + i + 1,
-      name: f.name,
-      naturalW: null,
-      naturalH: null,
-    }));
-    if (!arr.length) return;
-    apply(list => [...list, ...arr]);
-    setSelectedId(arr[0].id);
-  }, [subjects, apply, canvasW]);
+    setSelectedId(images[0].id);
+  }, [apply, canvasW]);
 
   const handleDrop = (e) => {
     e.preventDefault();
@@ -118,6 +122,10 @@ const MugshotStudio = () => {
   const removeSubject = useCallback((id) => {
     apply(list => list.filter(s => s.id !== id));
     setSelectedId(current => (current === id ? null : current));
+  }, [apply]);
+
+  const handleRename = useCallback((id, name) => {
+    apply(list => list.map(s => s.id === id ? renameSubject(s, name) : s));
   }, [apply]);
 
   const bringToFront = id => { const m = Math.max(...subjects.map(s => s.zIndex), 0); updateSubjectH(id, { zIndex: m + 1 }); };
@@ -138,18 +146,26 @@ const MugshotStudio = () => {
   };
 
   const handleResizePointerDown = (e, id, handleType) => {
+    if (isSpacePressed) return;
     e.stopPropagation();
     e.currentTarget.setPointerCapture(e.pointerId);
     const s = subjects.find(x => x.id === id);
-    const { h: unscaledH } = getBaseDimensions(s, floorY);
+    const { visible, anchor } = getSubjectGeometry(s, floorY);
     setResizeInfo({
       id,
       handleType,
       startX: e.clientX,
       startY: e.clientY,
-      initScale: s.scale,
-      initH: unscaledH * s.scale
+      initH: anchor.y - visible.top,
     });
+  };
+
+  const handleAnchorPointerDown = (e, id, kind) => {
+    if (e.button !== 0 || isSpacePressed) return;
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setSelectedId(id);
+    setAnchorInfo({ id, kind });
   };
 
   const onDragMove = useCallback((e) => {
@@ -166,31 +182,38 @@ const MugshotStudio = () => {
     } else if (resizeInfo) {
       const s = subjects.find(x => x.id === resizeInfo.id);
       if (!s) return;
-      const { h: unscaledH } = getBaseDimensions(s, floorY);
       const dy = (resizeInfo.startY - e.clientY) / zoom;
-      let newH = resizeInfo.initH + dy;
-      newH = Math.max(50, newH);
-      const newScale = newH / unscaledH;
-      updateSubject(resizeInfo.id, { scale: newScale });
+      updateSubject(resizeInfo.id, { scale: getScaleForGroundToTopPx(s, resizeInfo.initH + dy) });
+    } else if (anchorInfo) {
+      const s = subjects.find(x => x.id === anchorInfo.id);
+      const workspace = workspaceRef.current;
+      if (!s || !workspace) return;
+      const rect = workspace.getBoundingClientRect();
+      const point = { x: (e.clientX - rect.left) / zoom, y: (e.clientY - rect.top) / zoom };
+      const update = anchorInfo.kind === 'head'
+        ? getHeadUpdateForCanvasPoint(s, floorY, point)
+        : getAnchorUpdateForCanvasPoint(s, floorY, point);
+      updateSubject(anchorInfo.id, update);
     }
-  }, [dragInfo, resizeInfo, zoom, canvasW, floorY, subjects, updateSubject]);
+  }, [dragInfo, resizeInfo, anchorInfo, zoom, canvasW, floorY, subjects, updateSubject]);
 
   const onDragUp = useCallback(() => {
     setDragInfo(null);
     setResizeInfo(null);
+    setAnchorInfo(null);
     setIsSnapping(false);
     commit();
   }, [commit]);
 
   useEffect(() => {
-    if (!dragInfo && !resizeInfo) return;
+    if (!dragInfo && !resizeInfo && !anchorInfo) return;
     window.addEventListener('pointermove', onDragMove);
     window.addEventListener('pointerup', onDragUp);
     return () => {
       window.removeEventListener('pointermove', onDragMove);
       window.removeEventListener('pointerup', onDragUp);
     };
-  }, [dragInfo, resizeInfo, onDragMove, onDragUp]);
+  }, [dragInfo, resizeInfo, anchorInfo, onDragMove, onDragUp]);
 
   useEffect(() => {
     const onKey = (e) => {
@@ -206,15 +229,14 @@ const MugshotStudio = () => {
 
       if (e.target.tagName === 'INPUT') return;
 
-      if (selectedId && e.key === '[') {
+      if (selectedId && (e.key === '[' || e.key === ']')) {
         const s = subjects.find(x => x.id === selectedId);
-        if (s) updateSubjectH(selectedId, { scale: Math.max(0.05, s.scale - (e.shiftKey ? 0.1 : 0.01)) }, `scale-${selectedId}`);
-        e.preventDefault(); return;
-      }
-      if (selectedId && e.key === ']') {
-        const s = subjects.find(x => x.id === selectedId);
-        if (s) updateSubjectH(selectedId, { scale: Math.min(4, s.scale + (e.shiftKey ? 0.1 : 0.01)) }, `scale-${selectedId}`);
-        e.preventDefault(); return;
+        if (s) {
+          const delta = (e.shiftKey ? 0.1 : 0.01) * (e.key === ']' ? 1 : -1);
+          updateSubjectH(selectedId, { scale: shiftScale(s, delta) }, `scale-${selectedId}`);
+        }
+        e.preventDefault();
+        return;
       }
 
       if (!selectedId) return;
@@ -236,11 +258,14 @@ const MugshotStudio = () => {
     return () => window.removeEventListener('keydown', onKey);
   }, [selectedId, subjects, handleUndo, handleRedo, updateSubjectH, removeSubject]);
 
+  const annotationItems = getAnnotationItems({ subjects, selectedId, annotations, floorY, unit });
+
   const exportCanvas = async () => {
     try {
       const canvas = await renderBoard({
-        svgElement: workspaceRef.current?.querySelector('svg'),
+        svgElement: workspaceRef.current?.querySelector(':scope > svg'),
         subjects,
+        annotations: annotationItems,
         canvasW,
         canvasH,
         floorY,
@@ -274,6 +299,11 @@ const MugshotStudio = () => {
           onZoomIn={zoomIn}
           onZoomOut={zoomOut}
           onResetView={resetView}
+          unit={unit}
+          onUnitChange={setUnit}
+          annotations={annotations}
+          onToggleAnnotations={() => setAnnotations(a => ({ ...a, enabled: !a.enabled }))}
+          onScopeChange={(scope) => setAnnotations(a => ({ ...a, scope }))}
           onOpenFormat={() => setShowSettings(true)}
           onImport={handleFileUpload}
           onExport={exportCanvas}
@@ -288,7 +318,7 @@ const MugshotStudio = () => {
           onMouseDown={(e) => {
             if (e.button === 0) {
               if (isSpacePressed || e.target === containerRef.current || e.target === workspaceRef.current) {
-                setSelectedId(null);
+                if (!isSpacePressed) setSelectedId(null);
                 startPan(e);
               }
             }
@@ -312,15 +342,17 @@ const MugshotStudio = () => {
                 key={s.id}
                 subject={s}
                 floorY={floorY}
-                canvasH={canvasH}
+                zoom={zoom}
                 selected={selectedId === s.id}
-                showSnapBadge={dragInfo?.id === s.id && isSnapping}
+                showSnap={dragInfo?.id === s.id && isSnapping}
                 onPointerDown={e => handleSubjectPointerDown(e, s.id)}
                 onDoubleClick={e => handleSubjectDoubleClick(e, s.id)}
                 onResizeStart={(e, handleType) => handleResizePointerDown(e, s.id, handleType)}
-                onImageLoad={(w, h) => handleImageLoad(s.id, w, h)}
+                onAnchorStart={(e, kind) => handleAnchorPointerDown(e, s.id, kind)}
               />
             ))}
+
+            <AnnotationsLayer items={annotationItems} canvasW={canvasW} canvasH={canvasH} />
 
             {subjects.length === 0 && (
               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none" style={{ paddingTop: canvasH * 0.25 }}>
@@ -345,6 +377,7 @@ const MugshotStudio = () => {
       <aside className="w-72 bg-[#111] border-l border-gray-800 flex flex-col shrink-0">
         <Inspector
           subject={active}
+          unit={unit}
           canvasW={canvasW}
           onPreview={(upd) => updateSubject(selectedId, upd)}
           onApply={(upd) => updateSubjectH(selectedId, upd)}
@@ -359,6 +392,7 @@ const MugshotStudio = () => {
           selectedId={selectedId}
           onSelect={setSelectedId}
           onRemove={removeSubject}
+          onRename={handleRename}
         />
       </aside>
     </div>
