@@ -1,4 +1,5 @@
 import { getSubjectGeometry } from '../../domain/geometry.js';
+import { getImageFilter, isSubjectVisible } from '../../domain/appearance.js';
 import SelectionOverlay from './SelectionOverlay.jsx';
 
 const MARKER_SCREEN_PX = 30;
@@ -45,6 +46,8 @@ const SubjectView = ({
   onResizeStart,
   onAnchorStart,
 }) => {
+  if (!isSubjectVisible(subject)) return null;
+
   const { box, visible, originX, anchor, head } = getSubjectGeometry(subject, floorY);
 
   return (
@@ -66,6 +69,7 @@ const SubjectView = ({
           alt={subject.name}
           draggable="false"
           className="block w-full h-full"
+          style={{ filter: getImageFilter(subject) }}
         />
       </div>
 

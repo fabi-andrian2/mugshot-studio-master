@@ -1,7 +1,17 @@
 import { useEffect, useState } from 'react';
 import { CM_TO_PX } from '../../domain/constants.js';
 
-const StatusBar = ({ containerRef, workspaceRef, zoom, floorY, subjectCount, selectionLabel, canvasW, canvasH }) => {
+const StatusBar = ({
+  containerRef,
+  workspaceRef,
+  zoom,
+  floorY,
+  subjectCount,
+  hiddenCount = 0,
+  selectionLabel,
+  canvasW,
+  canvasH,
+}) => {
   const [mousePos, setMousePos] = useState({ x: 0, yCm: 0 });
 
   useEffect(() => {
@@ -23,13 +33,16 @@ const StatusBar = ({ containerRef, workspaceRef, zoom, floorY, subjectCount, sel
     <footer className="h-8 border-t border-gray-800 bg-[#111] flex items-center px-4 gap-5 text-[11px] text-gray-600 shrink-0">
       <span>X <span className="text-gray-400 font-mono">{mousePos.x}px</span></span>
       <span>H <span className="text-emerald-500 font-mono">{Math.max(0, mousePos.yCm)} cm</span></span>
-      <span>Sujets <strong className="text-gray-300">{subjectCount}</strong></span>
-      <span>Résolution : {canvasW}×{canvasH} px</span>
+      <span>
+        Sujets <strong className="text-gray-300">{subjectCount}</strong>
+        {hiddenCount > 0 && <span className="text-amber-400"> · {hiddenCount} masqué{hiddenCount > 1 ? 's' : ''}</span>}
+      </span>
+      <span>{canvasW}×{canvasH} px</span>
       {selectionLabel && (
         <span>Sélection <strong className="text-emerald-400 font-mono">{selectionLabel}</strong></span>
       )}
       <span className="ml-auto">
-        Espace + glisser : naviguer · Ctrl + molette : zoom sur le curseur · Poignées vertes : hauteur · Repères ⊕ : pied (vert) et tête (bleu)
+        Espace + glisser : naviguer · Ctrl + molette : zoom · Repères : tête (bleu), pied (vert)
       </span>
     </footer>
   );

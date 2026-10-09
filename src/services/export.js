@@ -1,5 +1,6 @@
 import { getSubjectGeometry } from '../domain/geometry.js';
 import { ANNOTATION_STYLE } from '../domain/annotations.js';
+import { SILHOUETTE_COLOR, getExportableSubjects } from '../domain/appearance.js';
 import loadImage from './loadImage.js';
 
 const BOARD_BACKGROUND = '#f2f2f4';
@@ -16,12 +17,25 @@ const drawGrid = async (ctx, svgElement, canvasW, canvasH) => {
   }
 };
 
+const toSilhouette = (img) => {
+  const canvas = document.createElement('canvas');
+  canvas.width = img.naturalWidth;
+  canvas.height = img.naturalHeight;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0);
+  ctx.globalCompositeOperation = 'source-in';
+  ctx.fillStyle = SILHOUETTE_COLOR;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  return canvas;
+};
+
 const drawSubject = (ctx, img, subject, floorY) => {
   const { box, originX } = getSubjectGeometry(subject, floorY);
+  const source = subject.silhouette ? toSilhouette(img) : img;
   ctx.save();
   ctx.translate(box.left + originX, box.top);
   if (subject.flipX) ctx.scale(-1, 1);
-  ctx.drawImage(img, -originX, 0, box.width, box.height);
+  ctx.drawImage(source, -originX, 0, box.width, box.height);
   ctx.restore();
 };
 
@@ -63,8 +77,7 @@ export const renderBoard = async ({ svgElement, subjects, annotations = [], canv
     await drawGrid(ctx, svgElement, canvasW, canvasH);
   }
 
-  const ordered = [...subjects].sort((a, b) => a.zIndex - b.zIndex);
-  for (const subject of ordered) {
+  for (const subject of getExportableSubjects(subjects)) {
     const img = await loadImage(subject.url);
     drawSubject(ctx, img, subject, floorY);
   }

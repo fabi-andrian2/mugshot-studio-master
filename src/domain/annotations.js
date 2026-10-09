@@ -1,5 +1,6 @@
 import { getSubjectGeometry, getSubjectHeightCm } from './geometry.js';
 import { formatHeight } from './measurement.js';
+import { isSubjectVisible } from './appearance.js';
 
 export const ANNOTATION_STYLE = {
   fontSize: 30,
@@ -14,12 +15,15 @@ export const ANNOTATION_STYLE = {
   labelGap: 14,
 };
 
+export const DEFAULT_ANNOTATIONS = { enabled: false, scope: 'selected' };
+
 export const getAnnotationItems = ({ subjects, selectedId, annotations, floorY, unit }) => {
   if (!annotations.enabled) return [];
 
+  const shown = subjects.filter(isSubjectVisible);
   const targets = annotations.scope === 'all'
-    ? [...subjects].sort((a, b) => a.zIndex - b.zIndex)
-    : subjects.filter((subject) => subject.id === selectedId);
+    ? [...shown].sort((a, b) => a.zIndex - b.zIndex)
+    : shown.filter((subject) => subject.id === selectedId);
 
   return targets.map((subject) => {
     const { visible, head } = getSubjectGeometry(subject, floorY);

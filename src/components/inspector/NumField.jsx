@@ -1,10 +1,16 @@
 import { useState, useRef } from 'react';
 
-const NumField = ({ value, onChange, onCommit, onCancel, unit = '', min, max, step = 1, label, decimals = 0 }) => {
+const SIZES = {
+  md: { box: 'h-8', text: 'text-xs' },
+  lg: { box: 'h-12', text: 'text-xl' },
+};
+
+const NumField = ({ value, onChange, onCommit, onCancel, unit = '', min, max, step = 1, label, decimals = 0, size = 'md' }) => {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const inputRef = useRef(null);
   const touched = useRef(false);
+  const dims = SIZES[size];
 
   const fmt = (v) => decimals > 0 ? Number(v).toFixed(decimals) : String(Math.round(v));
   const clamp = (v) => {
@@ -46,11 +52,11 @@ const NumField = ({ value, onChange, onCommit, onCancel, unit = '', min, max, st
   };
 
   return (
-    <div className="flex flex-col gap-0.5">
+    <div className="flex flex-col gap-1">
       {label && <span className="text-[10px] text-gray-500 uppercase tracking-wider">{label}</span>}
       <div
-        className="relative flex items-center bg-[#1e1e1e] border border-gray-700 rounded
-                   hover:border-gray-500 focus-within:border-emerald-500 transition-colors h-8"
+        className={`relative flex items-center bg-[#1a1a1a] border border-gray-700 rounded-md
+                   hover:border-gray-500 focus-within:border-emerald-500 transition-colors ${dims.box}`}
         onWheel={onWheel}
       >
         {editing ? (
@@ -70,16 +76,16 @@ const NumField = ({ value, onChange, onCommit, onCancel, unit = '', min, max, st
             }}
             onBlur={commit}
             onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') cancel(); }}
-            className="w-full bg-transparent text-center text-xs font-mono text-white outline-none px-1"
+            className={`w-full bg-transparent text-center font-mono text-white outline-none px-1 ${dims.text}`}
             autoFocus
           />
         ) : (
           <div
             onClick={startEdit}
-            className="w-full text-center text-xs font-mono text-white cursor-text py-1 px-1 select-none"
+            className={`w-full text-center font-mono text-white cursor-text py-1 px-1 select-none ${dims.text}`}
             title="Cliquer pour éditer · Molette pour incrémenter"
           >
-            {fmt(value)}{unit && <span className="text-gray-500 ml-0.5 text-[10px]">{unit}</span>}
+            {fmt(value)}{unit && <span className="text-gray-500 ml-1 text-[11px]">{unit}</span>}
           </div>
         )}
       </div>

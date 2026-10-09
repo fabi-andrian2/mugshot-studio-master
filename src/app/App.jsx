@@ -8,12 +8,19 @@ import {
   getScaleForGroundToTopPx,
   getAnchorUpdateForCanvasPoint,
   getHeadUpdateForCanvasPoint,
-  getSubjectHeightCm,
 } from '../domain/geometry.js';
-import { getAnnotationItems } from '../domain/annotations.js';
-import { clampScale, formatHeight } from '../domain/measurement.js';
+import { getAnnotationItems, DEFAULT_ANNOTATIONS } from '../domain/annotations.js';
+import { clampScale } from '../domain/measurement.js';
 import { arrangeSubjects, layoutOnImport } from '../domain/layout.js';
-import { areSubjectListsEqual, createSubject, renameSubject } from '../domain/subjects.js';
+import { isSubjectVisible } from '../domain/appearance.js';
+import {
+  areSubjectListsEqual,
+  createSubject,
+  renameSubject,
+  reorderSubject,
+  toggleVisibility,
+  getSelectionLabel,
+} from '../domain/subjects.js';
 import { renderBoard, downloadCanvasAsPng } from '../services/export.js';
 import { importImageFiles } from '../services/imageImport.js';
 import useHistory from '../hooks/useHistory.js';
@@ -63,7 +70,7 @@ const MugshotStudio = () => {
 
   const [showSettings, setShowSettings] = useState(false);
   const [unit, setUnit] = useState('cm');
-  const [annotations, setAnnotations] = useState({ enabled: false, scope: 'selected' });
+  const [annotations, setAnnotations] = useState(DEFAULT_ANNOTATIONS);
 
   const workspaceRef = useRef(null);
   const containerRef = useRef(null);
@@ -87,13 +94,11 @@ const MugshotStudio = () => {
   const handleUndo = useCallback(() => {
     if (gestureActive) return;
     undo();
-    setSelectedId(null);
   }, [gestureActive, undo]);
 
   const handleRedo = useCallback(() => {
     if (gestureActive) return;
     redo();
-    setSelectedId(null);
   }, [gestureActive, redo]);
 
   const updateSubject = useCallback((id, upd) => {
@@ -142,8 +147,13 @@ const MugshotStudio = () => {
     apply(list => list.map(s => s.id === id ? renameSubject(s, name) : s));
   }, [apply]);
 
-  const bringToFront = id => { const m = Math.max(...subjects.map(s => s.zIndex), 0); updateSubjectH(id, { zIndex: m + 1 }); };
-  const sendToBack   = id => { const m = Math.min(...subjects.map(s => s.zIndex), 1); updateSubjectH(id, { zIndex: m - 1 }); };
+  const handleToggleVisible = useCallback((id) => {
+    apply(list => list.map(s => s.id === id ? toggleVisibility(s) : s));
+  }, [apply]);
+
+  const handleMove = useCallback((id, move) => {
+    apply(list => reorderSubject(list, id, move));
+  }, [apply]);
 
   const handleSubjectPointerDown = (e, id) => {
     if (e.button !== 0 || isSpacePressed) return;
@@ -291,6 +301,7 @@ const MugshotStudio = () => {
   };
 
   const active = subjects.find(s => s.id === selectedId);
+  const hiddenCount = subjects.filter(s => !isSubjectVisible(s)).length;
 
   return (
     <div className="flex h-screen bg-[#0d0d0d] text-gray-200 font-sans overflow-hidden select-none">
@@ -386,7 +397,8 @@ const MugshotStudio = () => {
           zoom={zoom}
           floorY={floorY}
           subjectCount={subjects.length}
-          selectionLabel={active ? `${active.name} · ${formatHeight(getSubjectHeightCm(active), unit)}` : ''}
+          hiddenCount={hiddenCount}
+          selectionLabel={getSelectionLabel(active, unit)}
           canvasW={canvasW}
           canvasH={canvasH}
         />
@@ -401,16 +413,19 @@ const MugshotStudio = () => {
           onApply={(upd) => updateSubjectH(selectedId, upd)}
           onCancelEdit={rollback}
           onEndGesture={commit}
-          onBringToFront={() => bringToFront(selectedId)}
-          onSendToBack={() => sendToBack(selectedId)}
+          onRename={(name) => handleRename(selectedId, name)}
+          onToggleVisible={() => handleToggleVisible(selectedId)}
+          onMove={(move) => handleMove(selectedId, move)}
           onRemove={() => removeSubject(selectedId)}
         />
         <LayersPanel
           subjects={subjects}
           selectedId={selectedId}
           onSelect={setSelectedId}
-          onRemove={removeSubject}
+          onToggleVisible={handleToggleVisible}
+          onMove={handleMove}
           onRename={handleRename}
+          onRemove={removeSubject}
         />
       </aside>
     </div>
