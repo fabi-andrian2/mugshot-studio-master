@@ -23,10 +23,27 @@ import {
 } from '../domain/subjects.js';
 import { renderBoard, downloadCanvasAsPng } from '../services/export.js';
 import { importImageFiles } from '../services/imageImport.js';
+import { loadBackgroundImage, releaseBackgroundImage } from '../services/backgroundImage.js';
+import {
+  DEFAULT_BOARD,
+  isValidColor,
+  setBackgroundColor,
+  setBackgroundImage,
+  toggleGrid,
+} from '../domain/board.js';
 import useHistory from '../hooks/useHistory.js';
 import useCanvasNavigation from '../hooks/useCanvasNavigation.js';
+import useFullscreen from '../hooks/useFullscreen.js';
+import {
+  COMPOSITION_PADDING,
+  BUST_PADDING,
+  getSubjectRect,
+  getCompositionRect,
+  getBustRect,
+} from '../domain/views.js';
 import Toolbar from '../components/toolbar/Toolbar.jsx';
 import Grid from '../components/canvas/Grid.jsx';
+import BackgroundLayer from '../components/canvas/BackgroundLayer.jsx';
 import SubjectView from '../components/canvas/SubjectView.jsx';
 import AnnotationsLayer from '../components/canvas/AnnotationsLayer.jsx';
 import Inspector from '../components/inspector/Inspector.jsx';
@@ -72,6 +89,15 @@ const MugshotStudio = () => {
   const [unit, setUnit] = useState('cm');
   const [annotations, setAnnotations] = useState(DEFAULT_ANNOTATIONS);
 
+  const [board, setBoard] = useState(DEFAULT_BOARD);
+  const backgroundImageRef = useRef(null);
+
+  useEffect(() => {
+  return () => {
+    releaseBackgroundImage(backgroundImageRef.current);
+  };
+}, []);
+
   const workspaceRef = useRef(null);
   const containerRef = useRef(null);
 
@@ -85,9 +111,12 @@ const MugshotStudio = () => {
     zoomOut,
     resetView,
     fitToScreen,
+    showRect,
     startPan,
     onBackgroundDoubleClick,
   } = useCanvasNavigation({ containerRef, workspaceRef });
+  
+  const { isFullscreen, isSupported: canFullscreen, toggleFullscreen } = useFullscreen();
 
   const gestureActive = !!dragInfo || !!resizeInfo || !!anchorInfo;
 
@@ -290,6 +319,7 @@ const MugshotStudio = () => {
         svgElement: workspaceRef.current?.querySelector(':scope > svg'),
         subjects,
         annotations: annotationItems,
+        background: board.background,
         canvasW,
         canvasH,
         floorY,
@@ -302,6 +332,53 @@ const MugshotStudio = () => {
 
   const active = subjects.find(s => s.id === selectedId);
   const hiddenCount = subjects.filter(s => !isSubjectVisible(s)).length;
+  const compositionRect = getCompositionRect(subjects, floorY);
+  const bustRect = active ? getBustRect(active, floorY) : null;
+  const viewAvailability = {
+    global: true,
+    composition: compositionRect !== null,
+    bust: bustRect !== null,
+    actual: true,
+  };
+
+  const handleView = (id) => {
+    const canvasSize = { width: canvasW, height: canvasH };
+    if (id === 'global') fitToScreen(canvasW, canvasH);
+    if (id === 'composition' && compositionRect) {
+      showRect(compositionRect, canvasSize, { padding: COMPOSITION_PADDING });
+    }
+    if (id === 'bust' && bustRect) {
+      showRect(bustRect, canvasSize, { padding: BUST_PADDING });
+    }
+    if (id === 'actual') {
+      const focus = active ? getSubjectRect(active, floorY) : null;
+      showRect(focus ?? { left: 0, top: 0, width: canvasW, height: canvasH }, canvasSize, { zoom: 1 });
+    }
+  };
+
+  const applyBackgroundImage = (image) => {
+    releaseBackgroundImage(backgroundImageRef.current);
+    backgroundImageRef.current = image;
+    setBoard(current => setBackgroundImage(current, image));
+  };
+
+  const handleBackgroundColor = (color) => {
+    if (!isValidColor(color)) return;
+    releaseBackgroundImage(backgroundImageRef.current);
+    backgroundImageRef.current = null;
+    setBoard(current => setBackgroundColor(current, color));
+  };
+
+  const handleBackgroundImage = async (file) => {
+    try {
+      applyBackgroundImage(await loadBackgroundImage(file));
+    } catch (error) {
+      console.error(error);
+      window.alert('Image de fond non chargée : le fichier n\'est pas une image valide.');
+    }
+  };
+
+  const handleToggleGrid = () => setBoard(current => toggleGrid(current));
 
   return (
     <div className="flex h-screen bg-[#0d0d0d] text-gray-200 font-sans overflow-hidden select-none">
@@ -325,6 +402,11 @@ const MugshotStudio = () => {
           onZoomOut={zoomOut}
           onResetView={resetView}
           onFit={() => fitToScreen(canvasW, canvasH)}
+          onView={handleView}
+          viewAvailability={viewAvailability}
+          isFullscreen={isFullscreen}
+          canFullscreen={canFullscreen}
+          onToggleFullscreen={toggleFullscreen}
           unit={unit}
           onUnitChange={setUnit}
           annotations={annotations}
@@ -335,6 +417,11 @@ const MugshotStudio = () => {
           onOpenFormat={() => setShowSettings(true)}
           onImport={handleFileUpload}
           onExport={exportCanvas}
+          board={board}
+          onBackgroundColor={handleBackgroundColor}
+          onBackgroundImage={handleBackgroundImage}
+          onRemoveBackgroundImage={() => applyBackgroundImage(null)}
+          onToggleGrid={handleToggleGrid}
         />
 
         <div
@@ -355,15 +442,17 @@ const MugshotStudio = () => {
         >
           <div
             ref={workspaceRef}
-            className="relative bg-[#f2f2f4] shadow-2xl ring-1 ring-gray-600 shrink-0 select-none"
+            className="relative shadow-2xl ring-1 ring-gray-600 shrink-0 select-none"
             style={{
               width: canvasW,
               height: canvasH,
+              backgroundColor: board.background.color,
               transform: `translate(${panX}px, ${panY}px) scale(${zoom})`,
               transformOrigin: 'center center'
             }}
           >
-            <Grid canvasW={canvasW} canvasH={canvasH} />
+            <BackgroundLayer image={board.background.image} canvasW={canvasW} canvasH={canvasH} />
+            <Grid canvasW={canvasW} canvasH={canvasH} showGrid={board.showGrid} />
 
             {subjects.map(s => (
               <SubjectView

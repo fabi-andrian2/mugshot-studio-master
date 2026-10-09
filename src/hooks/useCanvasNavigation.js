@@ -1,14 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { DEFAULT_ZOOM } from '../domain/constants.js';
+import { clampZoom, getViewForRect } from '../domain/views.js';
 
-const MIN_ZOOM = 0.1;
-const MAX_ZOOM = 1.5;
 const BUTTON_ZOOM_FACTOR = 1.2;
 const WHEEL_ZOOM_FACTOR = 1.1;
 const QUICK_ZOOM = 0.8;
 const FIT_PADDING = 40;
-
-const clampZoom = (value) => Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, value));
 
 const zoomAround = (view, nextZoom, offsetX, offsetY) => {
   const ratio = nextZoom / view.zoom;
@@ -57,6 +54,18 @@ const useCanvasNavigation = ({ containerRef, workspaceRef }) => {
       (rect.height - 2 * FIT_PADDING) / canvasH,
     );
     commitView({ zoom: clampZoom(fitZoom), panX: 0, panY: 0 });
+  }, [containerRef, commitView]);
+
+  const showRect = useCallback((rect, canvas, options = {}) => {
+    const el = containerRef.current;
+    if (!el) return;
+    const box = el.getBoundingClientRect();
+    commitView(getViewForRect({
+      rect,
+      container: { width: box.width, height: box.height },
+      canvas,
+      ...options,
+    }));
   }, [containerRef, commitView]);
 
   const startPan = useCallback((e) => {
@@ -146,6 +155,7 @@ const useCanvasNavigation = ({ containerRef, workspaceRef }) => {
     zoomOut,
     resetView,
     fitToScreen,
+    showRect,
     startPan,
     onBackgroundDoubleClick,
   };

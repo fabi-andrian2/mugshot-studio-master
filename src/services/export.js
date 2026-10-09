@@ -2,8 +2,22 @@ import { getSubjectGeometry } from '../domain/geometry.js';
 import { ANNOTATION_STYLE } from '../domain/annotations.js';
 import { SILHOUETTE_COLOR, getExportableSubjects } from '../domain/appearance.js';
 import loadImage from './loadImage.js';
+import { DEFAULT_BACKGROUND, getCoverRect } from '../domain/board.js';
 
-const BOARD_BACKGROUND = '#f2f2f4';
+const drawBackground = async (ctx, background, canvasW, canvasH) => {
+  ctx.fillStyle = background.color;
+  ctx.fillRect(0, 0, canvasW, canvasH);
+
+  if (!background.image) return;
+
+  try {
+    const img = await loadImage(background.image.url);
+    const rect = getCoverRect(img.naturalWidth, img.naturalHeight, canvasW, canvasH);
+    ctx.drawImage(img, rect.left, rect.top, rect.width, rect.height);
+  } catch (error) {
+    console.error(error);
+  }
+};
 
 const drawGrid = async (ctx, svgElement, canvasW, canvasH) => {
   const svgText = new XMLSerializer().serializeToString(svgElement);
@@ -64,14 +78,21 @@ const drawAnnotations = (ctx, items) => {
   });
 };
 
-export const renderBoard = async ({ svgElement, subjects, annotations = [], canvasW, canvasH, floorY }) => {
+export const renderBoard = async ({
+  svgElement,
+  subjects,
+  annotations = [],
+  background = DEFAULT_BACKGROUND,
+  canvasW,
+  canvasH,
+  floorY,
+}) => {
   const canvas = document.createElement('canvas');
   canvas.width = canvasW;
   canvas.height = canvasH;
   const ctx = canvas.getContext('2d');
 
-  ctx.fillStyle = BOARD_BACKGROUND;
-  ctx.fillRect(0, 0, canvasW, canvasH);
+  await drawBackground(ctx, background, canvasW, canvasH);
 
   if (svgElement) {
     await drawGrid(ctx, svgElement, canvasW, canvasH);
