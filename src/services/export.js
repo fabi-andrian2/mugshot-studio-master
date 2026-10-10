@@ -1,8 +1,11 @@
-import { getSubjectGeometry } from '../domain/geometry.js';
-import { ANNOTATION_STYLE } from '../domain/annotations.js';
-import { SILHOUETTE_COLOR, getExportableSubjects } from '../domain/appearance.js';
-import loadImage from './loadImage.js';
-import { DEFAULT_BACKGROUND, getCoverRect } from '../domain/board.js';
+import { getSubjectGeometry } from "../domain/geometry.js";
+import { ANNOTATION_STYLE } from "../domain/annotations.js";
+import {
+  getSilhouetteStyle,
+  getExportableSubjects,
+} from "../domain/appearance.js";
+import loadImage from "./loadImage.js";
+import { DEFAULT_BACKGROUND, getCoverRect } from "../domain/board.js";
 
 const drawBackground = async (ctx, background, canvasW, canvasH) => {
   ctx.fillStyle = background.color;
@@ -12,7 +15,12 @@ const drawBackground = async (ctx, background, canvasW, canvasH) => {
 
   try {
     const img = await loadImage(background.image.url);
-    const rect = getCoverRect(img.naturalWidth, img.naturalHeight, canvasW, canvasH);
+    const rect = getCoverRect(
+      img.naturalWidth,
+      img.naturalHeight,
+      canvasW,
+      canvasH,
+    );
     ctx.drawImage(img, rect.left, rect.top, rect.width, rect.height);
   } catch (error) {
     console.error(error);
@@ -21,7 +29,7 @@ const drawBackground = async (ctx, background, canvasW, canvasH) => {
 
 const drawGrid = async (ctx, svgElement, canvasW, canvasH) => {
   const svgText = new XMLSerializer().serializeToString(svgElement);
-  const blob = new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' });
+  const blob = new Blob([svgText], { type: "image/svg+xml;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   try {
     const img = await loadImage(url);
@@ -31,22 +39,24 @@ const drawGrid = async (ctx, svgElement, canvasW, canvasH) => {
   }
 };
 
-const toSilhouette = (img) => {
-  const canvas = document.createElement('canvas');
+const toSilhouette = (img, color) => {
+  const canvas = document.createElement("canvas");
   canvas.width = img.naturalWidth;
   canvas.height = img.naturalHeight;
-  const ctx = canvas.getContext('2d');
+  const ctx = canvas.getContext("2d");
   ctx.drawImage(img, 0, 0);
-  ctx.globalCompositeOperation = 'source-in';
-  ctx.fillStyle = SILHOUETTE_COLOR;
+  ctx.globalCompositeOperation = "source-in";
+  ctx.fillStyle = color;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   return canvas;
 };
 
 const drawSubject = (ctx, img, subject, floorY) => {
   const { box, originX } = getSubjectGeometry(subject, floorY);
-  const source = subject.silhouette ? toSilhouette(img) : img;
+  const silhouette = getSilhouetteStyle(subject);
+  const source = subject.silhouette ? toSilhouette(img, silhouette.color) : img;
   ctx.save();
+  if (subject.silhouette) ctx.globalAlpha = silhouette.opacity;
   ctx.translate(box.left + originX, box.top);
   if (subject.flipX) ctx.scale(-1, 1);
   ctx.drawImage(source, -originX, 0, box.width, box.height);
@@ -57,7 +67,9 @@ const drawAnnotations = (ctx, items) => {
   items.forEach((item) => {
     ctx.save();
 
-    ctx.strokeStyle = item.emphasized ? ANNOTATION_STYLE.accentColor : ANNOTATION_STYLE.lineColor;
+    ctx.strokeStyle = item.emphasized
+      ? ANNOTATION_STYLE.accentColor
+      : ANNOTATION_STYLE.lineColor;
     ctx.lineWidth = ANNOTATION_STYLE.lineWidth;
     ctx.beginPath();
     ctx.moveTo(item.lineX1, item.lineY);
@@ -65,17 +77,39 @@ const drawAnnotations = (ctx, items) => {
     ctx.stroke();
 
     ctx.font = `bold ${ANNOTATION_STYLE.fontSize}px ${ANNOTATION_STYLE.fontFamily}`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'alphabetic';
-    ctx.lineJoin = 'round';
+    ctx.textAlign = "center";
+    ctx.textBaseline = "alphabetic";
+    ctx.lineJoin = "round";
     ctx.lineWidth = ANNOTATION_STYLE.haloWidth;
     ctx.strokeStyle = ANNOTATION_STYLE.haloColor;
     ctx.strokeText(item.text, item.labelX, item.labelY);
-    ctx.fillStyle = item.emphasized ? ANNOTATION_STYLE.accentColor : ANNOTATION_STYLE.textColor;
+    ctx.fillStyle = item.emphasized
+      ? ANNOTATION_STYLE.accentColor
+      : ANNOTATION_STYLE.textColor;
     ctx.fillText(item.text, item.labelX, item.labelY);
 
     ctx.restore();
   });
+};
+
+const drawMannequin = (ctx, geometry) => {
+  if (!geometry) return;
+
+  ctx.save();
+  ctx.translate(geometry.left, geometry.top);
+  ctx.scale(geometry.scale, geometry.scale);
+  ctx.globalAlpha = geometry.opacity;
+  ctx.fillStyle = geometry.color;
+  ctx.fill(new Path2D(geometry.path));
+  ctx.restore();
+
+  ctx.save();
+  ctx.font = `bold ${geometry.labelFontSize}px ${geometry.labelFontFamily}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = geometry.color;
+  ctx.fillText(geometry.label, geometry.labelX, geometry.labelY);
+  ctx.restore();
 };
 
 export const renderBoard = async ({
@@ -83,20 +117,23 @@ export const renderBoard = async ({
   subjects,
   annotations = [],
   background = DEFAULT_BACKGROUND,
+  mannequin = null,
   canvasW,
   canvasH,
   floorY,
 }) => {
-  const canvas = document.createElement('canvas');
+  const canvas = document.createElement("canvas");
   canvas.width = canvasW;
   canvas.height = canvasH;
-  const ctx = canvas.getContext('2d');
+  const ctx = canvas.getContext("2d");
 
   await drawBackground(ctx, background, canvasW, canvasH);
 
   if (svgElement) {
     await drawGrid(ctx, svgElement, canvasW, canvasH);
   }
+
+  drawMannequin(ctx, mannequin);
 
   for (const subject of getExportableSubjects(subjects)) {
     const img = await loadImage(subject.url);
@@ -109,8 +146,8 @@ export const renderBoard = async ({
 };
 
 export const downloadCanvasAsPng = (canvas) => {
-  const link = document.createElement('a');
+  const link = document.createElement("a");
   link.download = `Mugshot_Studio_${Date.now()}.png`;
-  link.href = canvas.toDataURL('image/png');
+  link.href = canvas.toDataURL("image/png");
   link.click();
 };

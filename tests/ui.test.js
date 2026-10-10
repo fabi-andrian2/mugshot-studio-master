@@ -4,9 +4,6 @@ import assert from 'node:assert/strict';
 import {
   isSubjectVisible,
   getExportableSubjects,
-  getImageFilter,
-  SILHOUETTE_COLOR,
-  SILHOUETTE_CSS_FILTER,
 } from '../src/domain/appearance.js';
 import { DEFAULT_SECTIONS, toggleSection } from '../src/domain/panels.js';
 import { DEFAULT_ANNOTATIONS, getAnnotationItems } from '../src/domain/annotations.js';
@@ -158,14 +155,6 @@ test('silhouette : effet purement visuel', () => {
   close(getSubjectHeightCm(subject), getSubjectHeightCm(silhouette));
   assert.equal(silhouette.groundAnchor, subject.groundAnchor);
   assert.equal(silhouette.headAnchor, subject.headAnchor);
-  assert.equal(getImageFilter(subject), 'none');
-  assert.equal(getImageFilter(silhouette), SILHOUETTE_CSS_FILTER);
-});
-
-test('silhouette : couleur du filtre CSS cohérente avec l\'export', () => {
-  const invert = Number(/invert\(([\d.]+)\)/.exec(SILHOUETTE_CSS_FILTER)[1]);
-  const channel = Math.round(255 * invert).toString(16).padStart(2, '0');
-  assert.equal(`#${channel}${channel}${channel}`, SILHOUETTE_COLOR);
 });
 
 test('renommage : name change, fileName intact, utilisé partout', () => {

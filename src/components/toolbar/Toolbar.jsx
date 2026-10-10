@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Eraser } from 'lucide-react';
 import {
   Upload,
   Download,
@@ -179,6 +180,16 @@ const Toolbar = ({
   onBackgroundImage,
   onRemoveBackgroundImage,
   onToggleGrid,
+  mannequin,
+  mannequinX,
+  onToggleMannequin,
+  onMannequinHeight,
+  onMannequinX,
+  onMannequinAutoX,
+  measureActive,
+  measureCount,
+  onToggleMeasure,
+  onClearMeasures,
 }) => (
   <header className="h-14 border-b border-gray-800 bg-[#111] flex items-center justify-between px-4 shrink-0 z-20">
     <div className="flex items-center gap-2">
@@ -271,12 +282,36 @@ const Toolbar = ({
       </ToolbarGroup>
     </div>
 
+      <ToolButton
+        icon={Ruler}
+        label="Mesurer"
+        title="Outil de mesure : glisse sur la planche pour mesurer une distance (Échap pour quitter)"
+        variant={measureActive ? 'active' : 'ghost'}
+        pressed={measureActive}
+        onClick={onToggleMeasure}
+      />
+      {measureCount > 0 && (
+        <ToolButton
+          icon={Eraser}
+          label="Effacer les mesures"
+          title={`Effacer les ${measureCount} mesure(s) temporaire(s)`}
+          onClick={onClearMeasures}
+        />
+      )}
+
     <BoardMenu
       board={board}
       onColor={onBackgroundColor}
       onImage={onBackgroundImage}
       onRemoveImage={onRemoveBackgroundImage}
       onToggleGrid={onToggleGrid}
+      unit={unit}
+      mannequin={mannequin}
+      mannequinX={mannequinX}
+      onToggleMannequin={onToggleMannequin}
+      onMannequinHeight={onMannequinHeight}
+      onMannequinX={onMannequinX}
+      onMannequinAutoX={onMannequinAutoX}
     />
 
     <ToolbarGroup>

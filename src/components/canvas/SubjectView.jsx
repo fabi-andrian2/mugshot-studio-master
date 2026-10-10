@@ -1,5 +1,5 @@
 import { getSubjectGeometry } from '../../domain/geometry.js';
-import { getImageFilter, isSubjectVisible } from '../../domain/appearance.js';
+import { getSilhouetteStyle, isSubjectVisible } from '../../domain/appearance.js';
 import SelectionOverlay from './SelectionOverlay.jsx';
 
 const MARKER_SCREEN_PX = 30;
@@ -49,6 +49,7 @@ const SubjectView = ({
   if (!isSubjectVisible(subject)) return null;
 
   const { box, visible, originX, anchor, head } = getSubjectGeometry(subject, floorY);
+  const silhouette = getSilhouetteStyle(subject);
 
   return (
     <>
@@ -64,13 +65,30 @@ const SubjectView = ({
           zIndex: subject.zIndex,
         }}
       >
-        <img
-          src={subject.url}
-          alt={subject.name}
-          draggable="false"
-          className="block w-full h-full"
-          style={{ filter: getImageFilter(subject) }}
-        />
+        {subject.silhouette ? (
+          <div
+            role="img"
+            aria-label={subject.name}
+            className="block w-full h-full"
+            style={{
+              backgroundColor: silhouette.color,
+              opacity: silhouette.opacity,
+              WebkitMaskImage: `url("${subject.url}")`,
+              maskImage: `url("${subject.url}")`,
+              WebkitMaskSize: '100% 100%',
+              maskSize: '100% 100%',
+              WebkitMaskRepeat: 'no-repeat',
+              maskRepeat: 'no-repeat',
+            }}
+          />
+        ) : (
+          <img
+            src={subject.url}
+            alt={subject.name}
+            draggable="false"
+            className="block w-full h-full"
+          />
+        )}
       </div>
 
       <div
