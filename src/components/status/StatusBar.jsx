@@ -8,6 +8,7 @@ const StatusBar = ({
   floorY,
   subjectCount,
   hiddenCount = 0,
+  measureActive = false,
   selectionLabel,
   canvasW,
   canvasH,
@@ -41,9 +42,15 @@ const StatusBar = ({
       {selectionLabel && (
         <span>Sélection <strong className="text-emerald-400 font-mono">{selectionLabel}</strong></span>
       )}
-      <span className="ml-auto">
-        Espace + glisser : naviguer · Ctrl + molette : zoom · Repères : tête (bleu), pied (vert)
-      </span>
+      {measureActive ? (
+        <span role="status" className="ml-auto text-amber-400 font-semibold">
+          Mode mesure · Glisse pour mesurer · Échap pour quitter
+        </span>
+      ) : (
+        <span className="ml-auto">
+          Espace + glisser : naviguer · Ctrl + molette : zoom · Repères : tête (bleu), pied (vert)
+        </span>
+      )}
     </footer>
   );
 };

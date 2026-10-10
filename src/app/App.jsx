@@ -67,6 +67,7 @@ import {
   clearMeasures,
   getMeasureEntries,
   formatDistance,
+  shiftMeasures,
 } from '../domain/measure.js';
 import {
   DEFAULT_MANNEQUIN,
@@ -387,6 +388,7 @@ const MugshotStudio = () => {
       }
 
       if (e.target.tagName === "INPUT") return;
+      if (measure.active) return;
 
       if (selectedId && (e.key === "[" || e.key === "]")) {
         const s = subjects.find((x) => x.id === selectedId);
@@ -435,6 +437,7 @@ const MugshotStudio = () => {
     return () => window.removeEventListener("keydown", onKey);
   }, [
     selectedId,
+    measure.active,
     subjects,
     handleUndo,
     handleRedo,
@@ -455,7 +458,7 @@ const MugshotStudio = () => {
   const exportCanvas = async () => {
     try {
       const canvas = await renderBoard({
-        svgElement: workspaceRef.current?.querySelector(":scope > svg"),
+        svgElement: workspaceRef.current?.querySelector(':scope > svg[data-export-grid]'),
         subjects,
         annotations: annotationItems,
         background: board.background,
@@ -464,9 +467,10 @@ const MugshotStudio = () => {
         canvasH,
         floorY,
       });
-      downloadCanvasAsPng(canvas);
+      await downloadCanvasAsPng(canvas);
     } catch (err) {
       console.error(err);
+      window.alert(`Export impossible : ${err.message}`);
     }
   };
 
@@ -563,6 +567,8 @@ const MugshotStudio = () => {
           canvasW={canvasW}
           canvasH={canvasH}
           onApply={(w, h) => {
+            setMeasure(current => shiftMeasures(current, h - canvasH));
+            setMeasureDraft(null);
             setCanvasW(w);
             setCanvasH(h);
             setShowSettings(false);
@@ -729,6 +735,7 @@ const MugshotStudio = () => {
           subjectCount={subjects.length}
           hiddenCount={hiddenCount}
           selectionLabel={getSelectionLabel(active, unit)}
+          measureActive={measure.active}
           canvasW={canvasW}
           canvasH={canvasH}
         />

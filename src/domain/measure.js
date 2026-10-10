@@ -40,3 +40,15 @@ export const getMeasureEntries = (measure, unit) =>
     ...item,
     label: formatDistance(item.start, item.end, unit),
   }));
+
+export const shiftMeasures = (measure, dy) => {
+  if (!Number.isFinite(dy) || dy === 0 || measure.items.length === 0) return measure;
+  return {
+    ...measure,
+    items: measure.items.map((item) => ({
+      ...item,
+      start: { x: item.start.x, y: item.start.y + dy },
+      end: { x: item.end.x, y: item.end.y + dy },
+    })),
+  };
+};

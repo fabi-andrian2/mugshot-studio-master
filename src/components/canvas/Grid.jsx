@@ -44,7 +44,7 @@ const buildGridElements = (canvasW, floorY, showGrid) => {
 const Grid = memo(function Grid({ canvasW, canvasH, showGrid = true }) {
   const floorY = canvasH - FLOOR_MARGIN;
   return (
-    <svg className="absolute inset-0 pointer-events-none"
+    <svg className="absolute inset-0 pointer-events-none" data-export-grid="true"
       width={canvasW} height={canvasH} viewBox={`0 0 ${canvasW} ${canvasH}`}>
       <text x={canvasW / 2} y="60" fontSize="38" fill="#111" fontWeight="900"
         textAnchor="middle" fontFamily="Impact,sans-serif" letterSpacing="3">

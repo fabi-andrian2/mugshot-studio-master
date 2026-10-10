@@ -138,3 +138,4 @@ const useHistory = (initialState, options = DEFAULT_OPTIONS) => {
 };
 
 export default useHistory;
+export { createState as createHistoryState, reducer as historyReducer };
