@@ -96,6 +96,8 @@ const reducer = (state, action) => {
       }
       return { ...state, present, committed, past, future };
     }
+    case 'reset':
+      return createState(action.state);
     default:
       return state;
   }
@@ -122,6 +124,7 @@ const useHistory = (initialState, options = DEFAULT_OPTIONS) => {
   const undo = useCallback(() => dispatch({ type: 'undo' }), []);
   const redo = useCallback(() => dispatch({ type: 'redo' }), []);
   const patchAll = useCallback((fn) => dispatch({ type: 'patchAll', fn }), []);
+  const reset = useCallback((nextState) => dispatch({ type: 'reset', state: nextState }), []);
 
   return {
     state: state.present,
@@ -132,6 +135,7 @@ const useHistory = (initialState, options = DEFAULT_OPTIONS) => {
     undo,
     redo,
     patchAll,
+    reset,
     canUndo: state.past.length > 0,
     canRedo: state.future.length > 0,
   };

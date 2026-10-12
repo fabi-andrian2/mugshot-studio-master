@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Upload } from "lucide-react";
+import { Upload, X } from "lucide-react";
 
 import {
   DEFAULT_W,
@@ -46,6 +46,8 @@ import {
 import useHistory from "../hooks/useHistory.js";
 import useCanvasNavigation from "../hooks/useCanvasNavigation.js";
 import useFullscreen from "../hooks/useFullscreen.js";
+import useSessionPersistence from "../hooks/useSessionPersistence.js";
+import SessionNotice from "../components/status/SessionNotice.jsx";
 import {
   COMPOSITION_PADDING,
   BUST_PADDING,
@@ -114,6 +116,7 @@ const MugshotStudio = () => {
     rollback,
     undo,
     redo,
+    reset: resetHistory,
     canUndo,
     canRedo,
   } = useHistory([], HISTORY_OPTIONS);
@@ -141,6 +144,40 @@ const MugshotStudio = () => {
     };
   }, []);
 
+  const handleRestore = useCallback(
+    (restored) => {
+      releaseBackgroundImage(backgroundImageRef.current);
+      resetHistory(restored.subjects);
+      setSelectedId(null);
+      setMeasureDraft(null);
+      setCanvasW(restored.canvasW);
+      setCanvasH(restored.canvasH);
+      setUnit(restored.unit);
+      setAnnotations(restored.annotations);
+      backgroundImageRef.current = restored.board.background.image;
+      setBoard(restored.board);
+      setMannequin(restored.mannequin);
+      setMeasure(restored.measure);
+    },
+    [resetHistory],
+  );
+  const {
+  phase,
+  problem,
+  saveStatus,
+  restored,
+  discardSavedSession,
+} = useSessionPersistence({
+  subjects,
+  canvasW,
+  canvasH,
+  unit,
+  board,
+  annotations,
+  mannequin,
+  measureItems: measure.items,
+  onRestore: handleRestore,
+});
   const workspaceRef = useRef(null);
   const containerRef = useRef(null);
 
@@ -164,6 +201,21 @@ const MugshotStudio = () => {
     isSupported: canFullscreen,
     toggleFullscreen,
   } = useFullscreen();
+
+
+  useEffect(() => {
+    const hasFiles = (e) =>
+      Array.from(e.dataTransfer?.types ?? []).includes("Files");
+    const preventFileNavigation = (e) => {
+      if (hasFiles(e) && !e.defaultPrevented) e.preventDefault();
+    };
+    window.addEventListener("dragover", preventFileNavigation);
+    window.addEventListener("drop", preventFileNavigation);
+    return () => {
+      window.removeEventListener("dragover", preventFileNavigation);
+      window.removeEventListener("drop", preventFileNavigation);
+    };
+  }, []);
 
   const gestureActive = !!dragInfo || !!resizeInfo || !!anchorInfo;
 
@@ -234,6 +286,45 @@ const MugshotStudio = () => {
   const handleDrop = (e) => {
     e.preventDefault();
     handleFileUpload(e.dataTransfer.files);
+  };
+
+
+  const dragDepth = useRef(0);
+  const [dropState, setDropState] = useState(null);
+
+  const hasFiles = (e) =>
+    Array.from(e.dataTransfer?.types ?? []).includes("Files");
+
+  const getDropState = (e) => {
+    const items = Array.from(e.dataTransfer?.items ?? []).filter(
+      (item) => item.kind === "file",
+    );
+    const allInvalid =
+      items.length > 0 &&
+      items.every((item) => item.type && !item.type.startsWith("image/"));
+    return allInvalid ? "reject" : "accept";
+  };
+
+  const handleDragEnter = (e) => {
+    if (!hasFiles(e)) return;
+    dragDepth.current += 1;
+    setDropState(getDropState(e));
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    if (hasFiles(e)) setDropState(getDropState(e));
+  };
+
+  const handleDragLeave = (e) => {
+    if (!hasFiles(e)) return;
+    dragDepth.current = Math.max(0, dragDepth.current - 1);
+    if (dragDepth.current === 0) setDropState(null);
+  };
+
+  const clearDropState = () => {
+    dragDepth.current = 0;
+    setDropState(null);
   };
 
   const removeSubject = useCallback(
@@ -377,6 +468,7 @@ const MugshotStudio = () => {
 
   useEffect(() => {
     const onKey = (e) => {
+      if (phase === "loading") return;
       const key = e.key.toLowerCase();
       const mod = e.ctrlKey || e.metaKey;
 
@@ -426,8 +518,9 @@ const MugshotStudio = () => {
         updateSubjectH(selectedId, { y: subj.y - step }, nudgeKey);
         e.preventDefault();
       }
-      if (e.key === "f" && !mod) {
+      if (key === "f" && !mod && !e.altKey && !e.repeat) {
         updateSubjectH(selectedId, { flipX: !subj.flipX });
+        e.preventDefault();
       }
       if (e.key === "Delete" || e.key === "Backspace") {
         removeSubject(selectedId);
@@ -436,6 +529,7 @@ const MugshotStudio = () => {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [
+    phase,
     selectedId,
     measure.active,
     subjects,
@@ -562,6 +656,13 @@ const MugshotStudio = () => {
 
   return (
     <div className="flex h-screen bg-[#0d0d0d] text-gray-200 font-sans overflow-hidden select-none">
+      <SessionNotice
+        phase={phase}
+        problem={problem}
+        saveStatus={saveStatus}
+        restored={restored}
+        onDiscard={discardSavedSession}
+      />
       {showSettings && (
         <FormatDialog
           canvasW={canvasW}
@@ -632,8 +733,13 @@ const MugshotStudio = () => {
                 ? "grabbing"
                 : "default",
           }}
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={handleDrop}
+          onDragEnter={handleDragEnter}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={(e) => {
+            clearDropState();
+            handleDrop(e);
+          }}
           onMouseDown={(e) => {
             if (e.button === 0) {
               if (
@@ -725,6 +831,29 @@ const MugshotStudio = () => {
               </div>
             )}
           </div>
+
+          {dropState && (
+            <div
+              className={`absolute inset-3 z-30 pointer-events-none rounded-lg border-2 border-dashed flex items-center justify-center ${
+                dropState === "reject"
+                  ? "border-red-500/70 bg-red-950/40"
+                  : "border-emerald-500/70 bg-emerald-950/40"
+              }`}
+            >
+              <div className="flex items-center gap-2 rounded-md border border-gray-700 bg-[#111] px-4 py-2 text-sm text-gray-100 shadow-2xl">
+                {dropState === "reject" ? (
+                  <X size={16} className="text-red-400" />
+                ) : (
+                  <Upload size={16} className="text-emerald-400" />
+                )}
+                <span>
+                  {dropState === "reject"
+                    ? "Fichier non pris en charge : seules les images sont importées"
+                    : "Déposer les images pour importer"}
+                </span>
+              </div>
+            </div>
+          )}
         </div>
 
         <StatusBar
