@@ -68,6 +68,7 @@ import {
   addMeasure,
   clearMeasures,
   getMeasureEntries,
+  getMeasureExportItems,
   formatDistance,
   shiftMeasures,
 } from '../domain/measure.js';
@@ -555,6 +556,7 @@ const MugshotStudio = () => {
         svgElement: workspaceRef.current?.querySelector(':scope > svg[data-export-grid]'),
         subjects,
         annotations: annotationItems,
+        measures: getMeasureExportItems(measure, unit),
         background: board.background,
         mannequin: mannequinGeometry,
         canvasW,

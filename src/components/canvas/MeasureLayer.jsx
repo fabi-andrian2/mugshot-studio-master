@@ -1,6 +1,4 @@
-const COLOR = '#f59e0b';
-const OUTLINE = '#0d0d0d';
-const FONT_FAMILY = 'Arial, Helvetica, sans-serif';
+import { MEASURE_STYLE } from '../../domain/measure.js';
 
 const MeasureLine = ({ start, end, label, zoom }) => {
   const midX = (start.x + end.x) / 2;
@@ -13,22 +11,22 @@ const MeasureLine = ({ start, end, label, zoom }) => {
         y1={start.y}
         x2={end.x}
         y2={end.y}
-        stroke={COLOR}
-        strokeWidth={2 / zoom}
+        stroke={MEASURE_STYLE.color}
+        strokeWidth={MEASURE_STYLE.lineWidth / zoom}
         strokeLinecap="round"
       />
-      <circle cx={start.x} cy={start.y} r={4 / zoom} fill={COLOR} />
-      <circle cx={end.x} cy={end.y} r={4 / zoom} fill={COLOR} />
+      <circle cx={start.x} cy={start.y} r={MEASURE_STYLE.endpointRadius / zoom} fill={MEASURE_STYLE.color} />
+      <circle cx={end.x} cy={end.y} r={MEASURE_STYLE.endpointRadius / zoom} fill={MEASURE_STYLE.color} />
       <text
         x={midX}
-        y={midY - 10 / zoom}
-        fontSize={13 / zoom}
-        fontFamily={FONT_FAMILY}
+        y={midY - MEASURE_STYLE.labelOffset / zoom}
+        fontSize={MEASURE_STYLE.fontSize / zoom}
+        fontFamily={MEASURE_STYLE.fontFamily}
         fontWeight="bold"
         textAnchor="middle"
-        fill={COLOR}
-        stroke={OUTLINE}
-        strokeWidth={4 / zoom}
+        fill={MEASURE_STYLE.color}
+        stroke={MEASURE_STYLE.outlineColor}
+        strokeWidth={MEASURE_STYLE.haloWidth / zoom}
         strokeLinejoin="round"
         paintOrder="stroke"
       >

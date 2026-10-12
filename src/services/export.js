@@ -1,5 +1,6 @@
 import { getSubjectGeometry } from '../domain/geometry.js';
 import { ANNOTATION_STYLE } from '../domain/annotations.js';
+import { MEASURE_STYLE } from '../domain/measure.js';
 import { getSilhouetteStyle } from '../domain/appearance.js';
 import { DEFAULT_BACKGROUND, getCoverRect } from '../domain/board.js';
 import { getExportSize, getExportLayers } from '../domain/exportPlan.js';
@@ -120,10 +121,44 @@ const drawAnnotations = (ctx, items) => {
   });
 };
 
+const drawMeasures = (ctx, items) => {
+  items.forEach((item) => {
+    ctx.save();
+
+    ctx.strokeStyle = MEASURE_STYLE.color;
+    ctx.lineWidth = MEASURE_STYLE.lineWidth;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(item.x1, item.y1);
+    ctx.lineTo(item.x2, item.y2);
+    ctx.stroke();
+
+    ctx.fillStyle = MEASURE_STYLE.color;
+    [[item.x1, item.y1], [item.x2, item.y2]].forEach(([x, y]) => {
+      ctx.beginPath();
+      ctx.arc(x, y, MEASURE_STYLE.endpointRadius, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    ctx.font = `bold ${MEASURE_STYLE.fontSize}px ${MEASURE_STYLE.fontFamily}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = MEASURE_STYLE.haloWidth;
+    ctx.strokeStyle = MEASURE_STYLE.outlineColor;
+    ctx.strokeText(item.text, item.labelX, item.labelY);
+    ctx.fillStyle = MEASURE_STYLE.color;
+    ctx.fillText(item.text, item.labelX, item.labelY);
+
+    ctx.restore();
+  });
+};
+
 export const renderBoard = async ({
   svgElement,
   subjects,
   annotations = [],
+  measures = [],
   background = DEFAULT_BACKGROUND,
   mannequin = null,
   canvasW,
@@ -142,13 +177,14 @@ export const renderBoard = async ({
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
 
-  const layers = getExportLayers({ subjects, mannequin, annotations, background });
+  const layers = getExportLayers({ subjects, mannequin, measures, annotations, background });
 
   for (const layer of layers) {
     if (layer.kind === 'background') await drawBackground(ctx, layer.background, width, height);
     else if (layer.kind === 'grid') await drawGrid(ctx, svgElement, width, height);
     else if (layer.kind === 'mannequin') drawMannequin(ctx, layer.geometry);
     else if (layer.kind === 'subject') await drawSubject(ctx, layer.subject, floorY);
+    else if (layer.kind === 'measures') drawMeasures(ctx, layer.items);
     else if (layer.kind === 'annotations') drawAnnotations(ctx, layer.items);
   }
 

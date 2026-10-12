@@ -119,17 +119,93 @@ test('export : une composition vide produit seulement le fond et la grille', () 
   );
 });
 
-test('export : le plan ne contient que des couches de document, jamais d\'éléments d\'interface ni de mesures', () => {
+test('export : les mesures sont placées après les sujets et avant les annotations', () => {
+  const measures = [
+    {
+      id: 1,
+      x1: 100,
+      y1: 200,
+      x2: 900,
+      y2: 200,
+      labelX: 500,
+      labelY: 190,
+      text: '100 cm',
+    },
+  ];
+
   const layers = getExportLayers({
     subjects: [make('a')],
-    mannequin: { left: 1 },
-    annotations: [{ text: 'x' }],
+    measures,
+    annotations: [{ text: '175 cm' }],
     background: DEFAULT_BACKGROUND,
-    measures: [{ id: 1, start: { x: 0, y: 0 }, end: { x: 10, y: 10 } }],
+  });
+
+  assert.deepEqual(kinds(layers), [
+    'background',
+    'grid',
+    'subject',
+    'measures',
+    'annotations',
+  ]);
+
+  assert.strictEqual(
+    layers.find((layer) => layer.kind === 'measures').items,
+    measures,
+  );
+});
+
+test('export : aucune couche de mesures sans mesure, aucune mutation des sources', () => {
+  const subjects = deepFreeze([make('a')]);
+  const measures = deepFreeze([]);
+  const annotations = deepFreeze([{ text: '175 cm' }]);
+
+  const layers = getExportLayers({
+    subjects,
+    measures,
+    annotations,
+    background: DEFAULT_BACKGROUND,
+  });
+
+  assert.ok(!kinds(layers).includes('measures'));
+  assert.ok(kinds(layers).every((kind) => EXPORT_LAYER_KINDS.includes(kind)));
+  assert.deepEqual(subjects, [make('a')]);
+  assert.deepEqual(measures, []);
+  assert.deepEqual(annotations, [{ text: '175 cm' }]);
+});
+
+test('export : seules les couches du document sont exportées, jamais les états temporaires de l’interface', () => {
+  const measures = [
+    {
+      id: 1,
+      x1: 0,
+      y1: 0,
+      x2: 800,
+      y2: 0,
+      labelX: 400,
+      labelY: -10,
+      text: '100 cm',
+    },
+  ];
+
+  const layers = getExportLayers({
+    subjects: [make('a')],
+    measures,
+    annotations: [],
+    background: DEFAULT_BACKGROUND,
+
+    // Ces paramètres d'interface ne doivent pas créer de couches exportées.
+    measureDraft: { start: { x: 0, y: 0 }, end: { x: 50, y: 50 } },
+    measureActive: true,
     selectedId: 'a',
     zoom: 0.38,
   });
 
-  assert.ok(kinds(layers).every((kind) => EXPORT_LAYER_KINDS.includes(kind)));
-  assert.ok(layers.every((layer) => !('measures' in layer) && !('selected' in layer)));
+  assert.ok(layers.every((layer) => EXPORT_LAYER_KINDS.includes(layer.kind)));
+  assert.ok(!kinds(layers).includes('measureDraft'));
+  assert.ok(!layers.some((layer) => 'selected' in layer));
+
+  assert.deepEqual(
+    layers.find((layer) => layer.kind === 'measures').items,
+    measures,
+  );
 });

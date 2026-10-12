@@ -3,6 +3,17 @@ import { formatHeight } from './measurement.js';
 
 export const MIN_MEASURE_SCREEN_PX = 6;
 
+export const MEASURE_STYLE = {
+  color: '#f59e0b',
+  outlineColor: '#0d0d0d',
+  fontFamily: 'Arial, Helvetica, sans-serif',
+  lineWidth: 2,
+  endpointRadius: 4,
+  fontSize: 13,
+  haloWidth: 4,
+  labelOffset: 10,
+};
+
 export const DEFAULT_MEASURE = { active: false, items: [] };
 
 export const toggleMeasureMode = (measure) => ({ ...measure, active: !measure.active });
@@ -52,3 +63,19 @@ export const shiftMeasures = (measure, dy) => {
     })),
   };
 };
+
+const isFinitePoint = (point) => Number.isFinite(point?.x) && Number.isFinite(point?.y);
+
+export const getMeasureExportItems = (measure, unit) =>
+  getMeasureEntries(measure, unit)
+    .filter((entry) => isFinitePoint(entry.start) && isFinitePoint(entry.end))
+    .map((entry) => ({
+      id: entry.id,
+      x1: entry.start.x,
+      y1: entry.start.y,
+      x2: entry.end.x,
+      y2: entry.end.y,
+      labelX: (entry.start.x + entry.end.x) / 2,
+      labelY: (entry.start.y + entry.end.y) / 2 - MEASURE_STYLE.labelOffset,
+      text: entry.label,
+    }));

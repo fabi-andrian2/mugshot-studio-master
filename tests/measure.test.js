@@ -15,6 +15,7 @@ import {
   addMeasure,
   clearMeasures,
   getMeasureEntries,
+  getMeasureExportItems,
 } from '../src/domain/measure.js';
 import { CM_TO_PX } from '../src/domain/constants.js';
 import { formatHeight } from '../src/domain/measurement.js';
@@ -164,4 +165,128 @@ test('mesure : aucune mesure ne touche aux sujets', () => {
   assert.deepEqual(list.map(getSubjectHeightCm), heightBefore);
   assert.deepEqual(list.map((s) => getSubjectGeometry(s, FLOOR_Y)), geometryBefore);
   assert.deepEqual(Object.keys(measure).sort(), ['active', 'items']);
+});
+
+test('export des mesures : horizontale, coordonnées et libellé centrés', () => {
+  const measure = {
+    active: true,
+    items: [{ id: 1, start: { x: 10, y: 20 }, end: { x: 810, y: 20 } }],
+  };
+
+  const [item] = getMeasureExportItems(measure, 'cm');
+
+  assert.deepEqual(item, {
+    id: 1,
+    x1: 10,
+    y1: 20,
+    x2: 810,
+    y2: 20,
+    labelX: 410,
+    labelY: 10,
+    text: formatHeight(100, 'cm'),
+  });
+});
+
+test('export des mesures : verticale', () => {
+  const measure = {
+    active: false,
+    items: [{ id: 2, start: { x: 5, y: 10 }, end: { x: 5, y: 330 } }],
+  };
+
+  const [item] = getMeasureExportItems(measure, 'cm');
+
+  assert.equal(item.x1, 5);
+  assert.equal(item.y1, 10);
+  assert.equal(item.x2, 5);
+  assert.equal(item.y2, 330);
+  assert.equal(item.labelX, 5);
+  assert.equal(item.labelY, (10 + 330) / 2 - 10);
+  assert.equal(item.text, formatHeight(40, 'cm'));
+});
+
+test('export des mesures : diagonale conserve la distance réelle du document', () => {
+  const measure = {
+    active: false,
+    items: [{ id: 3, start: { x: 0, y: 0 }, end: { x: 300, y: 400 } }],
+  };
+
+  const [item] = getMeasureExportItems(measure, 'cm');
+
+  assert.equal(getDistanceCm(
+    { x: item.x1, y: item.y1 },
+    { x: item.x2, y: item.y2 },
+  ), 62.5);
+
+  assert.equal(item.labelX, 150);
+  assert.equal(item.labelY, 190);
+  assert.equal(item.text, formatHeight(62.5, 'cm'));
+});
+
+test('export des mesures : l’unité change le libellé, pas les coordonnées', () => {
+  const measure = {
+    active: true,
+    items: [{ id: 4, start: { x: 10, y: 50 }, end: { x: 1410, y: 50 } }],
+  };
+
+  const [cm] = getMeasureExportItems(measure, 'cm');
+  const [ft] = getMeasureExportItems(measure, 'ft');
+
+  assert.notEqual(cm.text, ft.text);
+  assert.equal(cm.text, formatHeight(175, 'cm'));
+  assert.equal(ft.text, formatHeight(175, 'ft'));
+
+  for (const key of ['id', 'x1', 'y1', 'x2', 'y2', 'labelX', 'labelY']) {
+    assert.equal(cm[key], ft[key]);
+  }
+});
+
+test('export des mesures : plusieurs mesures conservent leurs identifiants et leur ordre', () => {
+  const measure = {
+    active: false,
+    items: [
+      { id: 8, start: { x: 0, y: 0 }, end: { x: 800, y: 0 } },
+      { id: 3, start: { x: 10, y: 20 }, end: { x: 10, y: 340 } },
+    ],
+  };
+
+  const items = getMeasureExportItems(measure, 'cm');
+
+  assert.deepEqual(items.map((item) => item.id), [8, 3]);
+  assert.equal(items.length, 2);
+});
+
+test('export des mesures : liste vide et points non finis sont ignorés', () => {
+  assert.deepEqual(getMeasureExportItems({ active: false, items: [] }, 'cm'), []);
+
+  const measure = {
+    active: false,
+    items: [
+      { id: 1, start: { x: 0, y: 0 }, end: { x: 800, y: 0 } },
+      { id: 2, start: { x: Number.NaN, y: 10 }, end: { x: 20, y: 10 } },
+    ],
+  };
+
+  const items = getMeasureExportItems(measure, 'cm');
+
+  assert.equal(items.length, 1);
+  assert.equal(items[0].id, 1);
+});
+
+test('export des mesures : la source n’est pas modifiée', () => {
+  const measure = deepFreeze({
+    active: false,
+    items: [
+      { id: 1, start: { x: 20, y: 30 }, end: { x: 820, y: 30 } },
+    ],
+  });
+
+  const snapshot = JSON.parse(JSON.stringify(measure));
+  const items = getMeasureExportItems(measure, 'cm');
+
+  assert.deepEqual(measure, snapshot);
+  assert.notStrictEqual(items, measure.items);
+  assert.equal(items[0].x1, 20);
+
+  items[0].x1 = 999;
+  assert.equal(measure.items[0].start.x, 20);
 });
