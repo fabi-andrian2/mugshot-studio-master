@@ -3,7 +3,6 @@ export const DEFAULT_H = 2200;
 export const FLOOR_MARGIN = 200;
 export const CM_TO_PX = 8;
 export const CM_PER_INCH = 2.54;
-export const MAX_CM = 230;
 export const SNAP_Y = 15;
 export const MAX_HIST = 60;
 export const DEFAULT_ZOOM = 0.38;
