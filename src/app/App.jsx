@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { Upload, X } from "lucide-react";
 
 import {
@@ -23,7 +23,6 @@ import { clampScale } from "../domain/measurement.js";
 import { arrangeSubjects, layoutOnImport } from "../domain/layout.js";
 import { isSubjectVisible, updateSilhouette } from "../domain/appearance.js";
 import {
-  areSubjectListsEqual,
   createSubject,
   renameSubject,
   reorderSubject,
@@ -43,7 +42,7 @@ import {
   setBackgroundImage,
   toggleGrid,
 } from "../domain/board.js";
-import useHistory from "../hooks/useHistory.js";
+import useDocumentHistory from "../hooks/useDocumentHistory.js";
 import useCanvasNavigation from "../hooks/useCanvasNavigation.js";
 import useFullscreen from "../hooks/useFullscreen.js";
 import useSessionPersistence from "../hooks/useSessionPersistence.js";
@@ -61,12 +60,17 @@ import BackgroundLayer from "../components/canvas/BackgroundLayer.jsx";
 import MannequinLayer from "../components/canvas/MannequinLayer.jsx";
 import MeasureLayer from '../components/canvas/MeasureLayer.jsx';
 import MeasureOverlay from '../components/canvas/MeasureOverlay.jsx';
+import { areDocumentStatesEqual, liftMeasureOperation } from '../domain/documentHistory.js';
 import {
-  DEFAULT_MEASURE,
-  toggleMeasureMode,
-  exitMeasureMode,
+  EMPTY_MEASURE_SELECTION,
+  selectMeasure,
+  clearMeasureSelection,
+  pruneMeasureSelection,
+} from '../domain/measureSelection.js';
+import {
   addMeasure,
   clearMeasures,
+  removeMeasures,
   getMeasureEntries,
   getMeasureExportItems,
   formatDistance,
@@ -88,7 +92,7 @@ import FormatDialog from "../components/dialogs/FormatDialog.jsx";
 import StatusBar from "../components/status/StatusBar.jsx";
 
 const HISTORY_OPTIONS = {
-  isEqual: areSubjectListsEqual,
+  isEqual: areDocumentStatesEqual,
   limit: MAX_HIST,
   mergeWindowMs: 500,
 };
@@ -110,9 +114,12 @@ const MugshotStudio = () => {
   const floorY = canvasH - FLOOR_MARGIN;
 
   const {
-    state: subjects,
+    subjects,
+    measureItems,
     set: setLive,
     apply,
+    applyMeasures,
+    patchMeasures,
     commit,
     rollback,
     undo,
@@ -120,8 +127,16 @@ const MugshotStudio = () => {
     reset: resetHistory,
     canUndo,
     canRedo,
-  } = useHistory([], HISTORY_OPTIONS);
-  const [selectedId, setSelectedId] = useState(null);
+  } = useDocumentHistory(HISTORY_OPTIONS);
+  const [selectedId, setSelectedIdRaw] = useState(null);
+  const [selectedMeasureIds, setSelectedMeasureIds] = useState(EMPTY_MEASURE_SELECTION);
+
+  const setSelectedId = useCallback((value) => {
+    setSelectedIdRaw(value);
+    if (typeof value !== "function" && value !== null) {
+      setSelectedMeasureIds((current) => clearMeasureSelection(current));
+    }
+  }, []);
 
   const [dragInfo, setDragInfo] = useState(null);
   const [resizeInfo, setResizeInfo] = useState(null);
@@ -136,8 +151,16 @@ const MugshotStudio = () => {
   const backgroundImageRef = useRef(null);
 
   const [mannequin, setMannequin] = useState(DEFAULT_MANNEQUIN);
-  const [measure, setMeasure] = useState(DEFAULT_MEASURE);
+  const [measureActive, setMeasureActive] = useState(false);
   const [measureDraft, setMeasureDraft] = useState(null);
+  const measure = useMemo(
+    () => ({ active: measureActive, items: measureItems }),
+    [measureActive, measureItems],
+  );
+  const activeMeasureIds = useMemo(
+    () => pruneMeasureSelection(selectedMeasureIds, measureItems),
+    [selectedMeasureIds, measureItems],
+  );
 
   useEffect(() => {
     return () => {
@@ -148,8 +171,9 @@ const MugshotStudio = () => {
   const handleRestore = useCallback(
     (restored) => {
       releaseBackgroundImage(backgroundImageRef.current);
-      resetHistory(restored.subjects);
+      resetHistory(restored.subjects, restored.measure.items);
       setSelectedId(null);
+      setSelectedMeasureIds(EMPTY_MEASURE_SELECTION);
       setMeasureDraft(null);
       setCanvasW(restored.canvasW);
       setCanvasH(restored.canvasH);
@@ -158,9 +182,9 @@ const MugshotStudio = () => {
       backgroundImageRef.current = restored.board.background.image;
       setBoard(restored.board);
       setMannequin(restored.mannequin);
-      setMeasure(restored.measure);
+      setMeasureActive(false);
     },
-    [resetHistory],
+    [resetHistory, setSelectedId],
   );
   const {
   phase,
@@ -222,11 +246,13 @@ const MugshotStudio = () => {
 
   const handleUndo = useCallback(() => {
     if (gestureActive) return;
+    setSelectedMeasureIds(EMPTY_MEASURE_SELECTION);
     undo();
   }, [gestureActive, undo]);
 
   const handleRedo = useCallback(() => {
     if (gestureActive) return;
+    setSelectedMeasureIds(EMPTY_MEASURE_SELECTION);
     redo();
   }, [gestureActive, redo]);
 
@@ -268,7 +294,7 @@ const MugshotStudio = () => {
       });
       setSelectedId(images[0].id);
     },
-    [apply, canvasW, floorY],
+    [apply, canvasW, floorY, setSelectedId],
   );
 
   const handleArrange = useCallback(
@@ -333,8 +359,21 @@ const MugshotStudio = () => {
       apply((list) => list.filter((s) => s.id !== id));
       setSelectedId((current) => (current === id ? null : current));
     },
-    [apply],
+    [apply, setSelectedId],
   );
+
+  const handleSelectMeasure = useCallback((id, additive) => {
+    setSelectedIdRaw(null);
+    setSelectedMeasureIds((current) => selectMeasure(current, id, additive));
+  }, []);
+
+  const deleteSelectedMeasures = useCallback(() => {
+    if (activeMeasureIds.length === 0) return;
+    applyMeasures(
+      liftMeasureOperation((current) => removeMeasures(current, activeMeasureIds)),
+    );
+    setSelectedMeasureIds(EMPTY_MEASURE_SELECTION);
+  }, [activeMeasureIds, applyMeasures]);
 
   const handleRename = useCallback(
     (id, name) => {
@@ -483,6 +522,19 @@ const MugshotStudio = () => {
       if (e.target.tagName === "INPUT") return;
       if (measure.active) return;
 
+      if (activeMeasureIds.length > 0) {
+        if (e.key === "Delete" || e.key === "Backspace") {
+          deleteSelectedMeasures();
+          e.preventDefault();
+          return;
+        }
+        if (e.key === "Escape") {
+          setSelectedMeasureIds(EMPTY_MEASURE_SELECTION);
+          e.preventDefault();
+          return;
+        }
+      }
+
       if (selectedId && (e.key === "[" || e.key === "]")) {
         const s = subjects.find((x) => x.id === selectedId);
         if (s) {
@@ -533,6 +585,8 @@ const MugshotStudio = () => {
     phase,
     selectedId,
     measure.active,
+    activeMeasureIds,
+    deleteSelectedMeasures,
     subjects,
     handleUndo,
     handleRedo,
@@ -640,17 +694,22 @@ const MugshotStudio = () => {
 
   const handleToggleMeasure = () => {
     setMeasureDraft(null);
-    setMeasure(current => toggleMeasureMode(current));
+    setSelectedMeasureIds(EMPTY_MEASURE_SELECTION);
+    setMeasureActive(current => !current);
   };
-  const handleClearMeasures = () => setMeasure(current => clearMeasures(current));
-  const handleMeasureComplete = (start, end) => setMeasure(current => addMeasure(current, start, end));
+  const handleClearMeasures = () => {
+    applyMeasures(liftMeasureOperation(clearMeasures));
+    setSelectedMeasureIds(EMPTY_MEASURE_SELECTION);
+  };
+  const handleMeasureComplete = (start, end) =>
+    patchMeasures(liftMeasureOperation(current => addMeasure(current, start, end)));
 
   useEffect(() => {
     if (!measure.active) return;
     const onEscape = (e) => {
       if (e.key !== 'Escape') return;
       setMeasureDraft(null);
-      setMeasure(current => exitMeasureMode(current));
+      setMeasureActive(false);
     };
     window.addEventListener('keydown', onEscape);
     return () => window.removeEventListener('keydown', onEscape);
@@ -670,7 +729,7 @@ const MugshotStudio = () => {
           canvasW={canvasW}
           canvasH={canvasH}
           onApply={(w, h) => {
-            setMeasure(current => shiftMeasures(current, h - canvasH));
+            patchMeasures(liftMeasureOperation(current => shiftMeasures(current, h - canvasH)));
             setMeasureDraft(null);
             setCanvasW(w);
             setCanvasH(h);
@@ -749,7 +808,10 @@ const MugshotStudio = () => {
                 e.target === containerRef.current ||
                 e.target === workspaceRef.current
               ) {
-                if (!isSpacePressed) setSelectedId(null);
+                if (!isSpacePressed) {
+                  setSelectedId(null);
+                  setSelectedMeasureIds(EMPTY_MEASURE_SELECTION);
+                }
                 startPan(e);
               }
             }
@@ -805,9 +867,12 @@ const MugshotStudio = () => {
               draft={measure.active ? measureDraft : null}
               unit={unit}
               zoom={zoom}
+              isSpacePressed={isSpacePressed}
               canvasW={canvasW}
               canvasH={canvasH}
               formatDraft={(d, u) => formatDistance(d.start, d.end, u)}
+              selectedIds={activeMeasureIds}
+              onSelect={measure.active ? undefined : handleSelectMeasure}
             />
             {measure.active && (
               <MeasureOverlay
