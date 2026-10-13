@@ -29,6 +29,7 @@ import {
   toggleVisibility,
   getSelectionLabel,
 } from "../domain/subjects.js";
+import { pickImageFile } from "../domain/fileDrop.js";
 import { renderBoard, downloadCanvasAsPng } from "../services/export.js";
 import { importImageFiles } from "../services/imageImport.js";
 import {
@@ -678,6 +679,17 @@ const MugshotStudio = () => {
     }
   };
 
+  const handleBackgroundFiles = (files) => {
+    const file = pickImageFile(files);
+    if (!file) {
+      window.alert(
+        "Fichier non pris en charge : dépose une image pour l'utiliser comme fond.",
+      );
+      return;
+    }
+    handleBackgroundImage(file);
+  };
+
   const handleToggleGrid = () => setBoard((current) => toggleGrid(current));
 
   const handleSilhouette = (patch) => {
@@ -770,6 +782,7 @@ const MugshotStudio = () => {
           board={board}
           onBackgroundColor={handleBackgroundColor}
           onBackgroundImage={handleBackgroundImage}
+          onBackgroundImageFiles={handleBackgroundFiles}
           onRemoveBackgroundImage={() => applyBackgroundImage(null)}
           onToggleGrid={handleToggleGrid}
           mannequin={mannequin}
