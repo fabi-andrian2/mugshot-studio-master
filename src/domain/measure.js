@@ -12,6 +12,10 @@ export const MEASURE_STYLE = {
   fontSize: 13,
   haloWidth: 4,
   labelOffset: 10,
+  selectionColor: '#34d399',
+  selectionHaloWidth: 8,
+  selectionRingRadius: 8,
+  hitWidth: 14,
 };
 
 export const DEFAULT_MEASURE = { active: false, items: [] };
@@ -45,6 +49,12 @@ export const addMeasure = (measure, start, end) => {
 
 export const clearMeasures = (measure) =>
   (measure.items.length ? { ...measure, items: [] } : measure);
+
+export const removeMeasures = (measure, ids) => {
+  const toRemove = new Set(ids);
+  if (toRemove.size === 0 || !measure.items.some((item) => toRemove.has(item.id))) return measure;
+  return { ...measure, items: measure.items.filter((item) => !toRemove.has(item.id)) };
+};
 
 export const getMeasureEntries = (measure, unit) =>
   measure.items.map((item) => ({
