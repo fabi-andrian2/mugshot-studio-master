@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Palette, ChevronDown, Image as ImageIcon, X } from 'lucide-react';
+import { Palette, ChevronDown } from 'lucide-react';
 import { ToolButton } from './controls.jsx';
+import BackgroundImageField from './BackgroundImageField.jsx';
 import NumField from '../inspector/NumField.jsx';
 import { BACKGROUND_PRESETS } from '../../domain/board.js';
 import { MIN_HEIGHT_CM, MAX_HEIGHT_CM } from '../../domain/constants.js';
@@ -31,6 +32,7 @@ const BoardMenu = ({
   board,
   onColor,
   onImage,
+  onImageFiles,
   onRemoveImage,
   onToggleGrid,
   unit,
@@ -88,34 +90,13 @@ const BoardMenu = ({
 
             <div className="space-y-2">
               <SectionTitle>Image de fond</SectionTitle>
-              <p className="text-[11px] text-gray-500 truncate" title={image ? image.fileName : ''}>
-                {image ? image.fileName : 'Aucune image'}
-              </p>
-              <div className="flex gap-2">
-                <label className="flex-1 flex items-center justify-center gap-1.5 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-md px-2.5 py-1.5 text-xs text-gray-300 cursor-pointer transition">
-                  <ImageIcon size={12} /> {image ? 'Remplacer' : 'Choisir une image'}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files[0];
-                      e.target.value = '';
-                      setOpen(false);
-                      if (file) onImage(file);
-                    }}
-                  />
-                </label>
-                <button
-                  type="button"
-                  disabled={!image}
-                  onClick={onRemoveImage}
-                  title="Retirer l'image et revenir au fond uni"
-                  className="flex items-center gap-1 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-md px-2.5 py-1.5 text-xs text-gray-300 transition disabled:opacity-30 disabled:cursor-not-allowed"
-                >
-                  <X size={12} /> Retirer
-                </button>
-              </div>
+              <BackgroundImageField
+                image={image}
+                onImage={onImage}
+                onImageFiles={onImageFiles}
+                onRemove={onRemoveImage}
+                onDone={() => setOpen(false)}
+              />
             </div>
 
             <div className="space-y-2">
