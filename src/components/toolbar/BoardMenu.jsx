@@ -56,7 +56,7 @@ const BoardMenu = ({
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full mt-1 z-50 w-64 max-h-[80vh] overflow-auto bg-[#1c1c1c] border border-gray-700 rounded-md shadow-2xl p-3 space-y-4">
+          <div className="absolute right-0 top-full mt-1 z-50 w-64 origin-top-right animate-pop-in max-h-[80vh] overflow-auto bg-[#1c1c1c] border border-gray-700 rounded-md shadow-2xl p-3 space-y-4">
             <div className="space-y-2">
               <SectionTitle>Fond uni</SectionTitle>
               <div className="flex items-center gap-1.5 flex-wrap">

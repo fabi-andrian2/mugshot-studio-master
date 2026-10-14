@@ -14,7 +14,7 @@ const Section = ({ title, open, onToggle, summary, children }) => (
       </span>
       {!open && summary && <span className="text-[11px] font-mono text-gray-400 truncate ml-2">{summary}</span>}
     </button>
-    {open && <div className="px-4 pb-4 space-y-3">{children}</div>}
+    {open && <div className="px-4 pb-4 space-y-3 animate-fade-in">{children}</div>}
   </section>
 );
 
