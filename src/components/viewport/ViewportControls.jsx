@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ZoomIn, ZoomOut, Scan, Focus, ChevronDown, Expand, Shrink } from 'lucide-react';
+import { ZoomIn, ZoomOut, Scan, Focus, ChevronDown, Expand, Shrink, Presentation, X } from 'lucide-react';
 import { ToolButton } from '../toolbar/controls.jsx';
 
 const VIEW_COMMANDS = [
@@ -58,9 +58,10 @@ const ViewportControls = ({
   isFullscreen,
   canFullscreen,
   onToggleFullscreen,
+  presentation = false,
+  onTogglePresentation,
 }) => (
-  <div className="absolute bottom-3 right-3 z-20 flex items-center gap-1.5 rounded-lg border border-gray-800 bg-[#111]/95 p-1.5 shadow-2xl">
-    <ToolButton icon={ZoomOut} title="Zoom arrière" onClick={onZoomOut} />
+  <div className={`absolute bottom-3 right-3 z-20 flex items-center gap-1.5 rounded-lg border border-gray-800 bg-[#111]/95 p-1.5 shadow-2xl ${presentation ? 'opacity-70 hover:opacity-100' : ''}`}>    <ToolButton icon={ZoomOut} title="Zoom arrière" onClick={onZoomOut} />
     <button
       type="button"
       onClick={onResetView}
@@ -74,12 +75,29 @@ const ViewportControls = ({
     <ViewMenu availability={viewAvailability} onView={onView} />
     <ToolButton
       icon={isFullscreen ? Shrink : Expand}
-      title={isFullscreen ? 'Quitter le plein écran (Échap)' : 'Plein écran'}
+      title={isFullscreen ? 'Quitter le plein écran du navigateur (Échap)' : 'Plein écran du navigateur'}
       disabled={!canFullscreen}
       variant={isFullscreen ? 'active' : 'ghost'}
       pressed={isFullscreen}
       onClick={onToggleFullscreen}
     />
+    {presentation ? (
+      <ToolButton
+        icon={X}
+        label="Quitter la présentation"
+        title="Quitter le mode présentation (Échap)"
+        variant="primary"
+        alwaysLabel
+        onClick={onTogglePresentation}
+      />
+    ) : (
+      <ToolButton
+        icon={Presentation}
+        label="Présentation"
+        title="Mode présentation : masque l'interface pour ne garder que la planche (Échap pour quitter)"
+        onClick={onTogglePresentation}
+      />
+    )}
   </div>
 );
 

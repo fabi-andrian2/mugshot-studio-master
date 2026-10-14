@@ -148,6 +148,7 @@ const MugshotStudio = () => {
 
   const [showSettings, setShowSettings] = useState(false);
   const [layout, setLayout] = useState(() => getInitialPanelLayout(window.innerWidth));
+  const [presentation, setPresentation] = useState(false);
   const [unit, setUnit] = useState("cm");
   const [annotations, setAnnotations] = useState(DEFAULT_ANNOTATIONS);
 
@@ -707,6 +708,33 @@ const MugshotStudio = () => {
   const handleMannequinX = (x) => setMannequin(current => setMannequinX(current, x));
   const handleMannequinAutoX = () => setMannequin(current => setMannequinX(current, null));
 
+  const setPresentationMode = useCallback(
+    (next) => {
+      if (next) {
+        setSelectedId(null);
+        setSelectedMeasureIds(EMPTY_MEASURE_SELECTION);
+        setMeasureDraft(null);
+        setMeasureActive(false);
+      }
+      setPresentation(next);
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => fitToScreen(canvasW, canvasH)),
+      );
+    },
+    [setSelectedId, fitToScreen, canvasW, canvasH],
+  );
+
+  useEffect(() => {
+    if (!presentation) return;
+    const onEscape = (e) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      setPresentationMode(false);
+    };
+    window.addEventListener("keydown", onEscape);
+    return () => window.removeEventListener("keydown", onEscape);
+  }, [presentation, setPresentationMode]);
+
   const handleToggleMeasure = () => {
     setMeasureDraft(null);
     setSelectedMeasureIds(EMPTY_MEASURE_SELECTION);
@@ -787,11 +815,12 @@ const MugshotStudio = () => {
           measureCount={measure.items.length}
           onToggleMeasure={handleToggleMeasure}
           onClearMeasures={handleClearMeasures}
+          hidden={presentation}
         />
 
       <div className="flex flex-1 min-h-0">
         {layout.layersOpen ? (
-          <aside className="w-56 bg-[#111] border-r border-gray-800 flex flex-col shrink-0">
+          <aside className={`${presentation ? "hidden" : "flex"} w-56 bg-[#111] border-r border-gray-800 flex-col shrink-0`}>
             <LayersPanel
               subjects={subjects}
               selectedId={selectedId}
@@ -804,7 +833,7 @@ const MugshotStudio = () => {
             />
           </aside>
         ) : (
-          <LayersRail count={subjects.length} onExpand={() => setLayout(toggleLayersPanel)} />
+          <LayersRail count={subjects.length} onExpand={() => setLayout(toggleLayersPanel)} hidden={presentation} />
         )}
 
         <div className="flex-1 flex flex-col min-h-0 min-w-0">
@@ -957,6 +986,8 @@ const MugshotStudio = () => {
             isFullscreen={isFullscreen}
             canFullscreen={canFullscreen}
             onToggleFullscreen={toggleFullscreen}
+            presentation={presentation}
+            onTogglePresentation={() => setPresentationMode(!presentation)}
           />
         </div>
 
@@ -971,10 +1002,11 @@ const MugshotStudio = () => {
           measureActive={measure.active}
           canvasW={canvasW}
           canvasH={canvasH}
+          hidden={presentation}
         />
       </div>
 
-      <aside className="w-64 xl:w-72 bg-[#111] border-l border-gray-800 flex flex-col shrink-0">
+      <aside className={`${presentation ? "hidden" : "flex"} w-64 xl:w-72 bg-[#111] border-l border-gray-800 flex-col shrink-0`}>
         <Inspector
           subject={active}
           unit={unit}
