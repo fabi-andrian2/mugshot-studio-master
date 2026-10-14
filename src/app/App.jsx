@@ -88,7 +88,9 @@ import {
 import SubjectView from "../components/canvas/SubjectView.jsx";
 import AnnotationsLayer from "../components/canvas/AnnotationsLayer.jsx";
 import Inspector from "../components/inspector/Inspector.jsx";
-import LayersPanel from "../components/layers/LayersPanel.jsx";
+import LayersPanel, { LayersRail } from "../components/layers/LayersPanel.jsx";
+import ViewportControls from "../components/viewport/ViewportControls.jsx";
+import { getInitialPanelLayout, toggleLayersPanel } from "../domain/panels.js";
 import FormatDialog from "../components/dialogs/FormatDialog.jsx";
 import StatusBar from "../components/status/StatusBar.jsx";
 
@@ -145,6 +147,7 @@ const MugshotStudio = () => {
   const [isSnapping, setIsSnapping] = useState(false);
 
   const [showSettings, setShowSettings] = useState(false);
+  const [layout, setLayout] = useState(() => getInitialPanelLayout(window.innerWidth));
   const [unit, setUnit] = useState("cm");
   const [annotations, setAnnotations] = useState(DEFAULT_ANNOTATIONS);
 
@@ -728,7 +731,7 @@ const MugshotStudio = () => {
   }, [measure.active]);
 
   return (
-    <div className="flex h-screen bg-[#0d0d0d] text-gray-200 font-sans overflow-hidden select-none">
+    <div className="flex flex-col h-screen bg-[#0d0d0d] text-gray-200 font-sans overflow-hidden select-none">
       <SessionNotice
         phase={phase}
         problem={problem}
@@ -751,22 +754,11 @@ const MugshotStudio = () => {
         />
       )}
 
-      <div className="flex-1 flex flex-col h-full min-w-0">
         <Toolbar
           canUndo={canUndo}
           canRedo={canRedo}
           onUndo={handleUndo}
           onRedo={handleRedo}
-          zoom={zoom}
-          onZoomIn={zoomIn}
-          onZoomOut={zoomOut}
-          onResetView={resetView}
-          onFit={() => fitToScreen(canvasW, canvasH)}
-          onView={handleView}
-          viewAvailability={viewAvailability}
-          isFullscreen={isFullscreen}
-          canFullscreen={canFullscreen}
-          onToggleFullscreen={toggleFullscreen}
           unit={unit}
           onUnitChange={setUnit}
           annotations={annotations}
@@ -796,6 +788,26 @@ const MugshotStudio = () => {
           onToggleMeasure={handleToggleMeasure}
           onClearMeasures={handleClearMeasures}
         />
+
+      <div className="flex flex-1 min-h-0">
+        {layout.layersOpen ? (
+          <aside className="w-56 bg-[#111] border-r border-gray-800 flex flex-col shrink-0">
+            <LayersPanel
+              subjects={subjects}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              onToggleVisible={handleToggleVisible}
+              onMove={handleMove}
+              onRename={handleRename}
+              onRemove={removeSubject}
+              onCollapse={() => setLayout(toggleLayersPanel)}
+            />
+          </aside>
+        ) : (
+          <LayersRail count={subjects.length} onExpand={() => setLayout(toggleLayersPanel)} />
+        )}
+
+        <div className="flex-1 flex flex-col min-h-0 min-w-0">
 
         <div
           ref={containerRef}
@@ -934,6 +946,18 @@ const MugshotStudio = () => {
               </div>
             </div>
           )}
+          <ViewportControls
+            zoom={zoom}
+            onZoomIn={zoomIn}
+            onZoomOut={zoomOut}
+            onResetView={resetView}
+            onFit={() => fitToScreen(canvasW, canvasH)}
+            onView={handleView}
+            viewAvailability={viewAvailability}
+            isFullscreen={isFullscreen}
+            canFullscreen={canFullscreen}
+            onToggleFullscreen={toggleFullscreen}
+          />
         </div>
 
         <StatusBar
@@ -950,7 +974,7 @@ const MugshotStudio = () => {
         />
       </div>
 
-      <aside className="w-72 bg-[#111] border-l border-gray-800 flex flex-col shrink-0">
+      <aside className="w-64 xl:w-72 bg-[#111] border-l border-gray-800 flex flex-col shrink-0">
         <Inspector
           subject={active}
           unit={unit}
@@ -965,17 +989,9 @@ const MugshotStudio = () => {
           onRemove={() => removeSubject(selectedId)}
           onSilhouette={handleSilhouette}
         />
-        <LayersPanel
-          subjects={subjects}
-          selectedId={selectedId}
-          onSelect={setSelectedId}
-          onToggleVisible={handleToggleVisible}
-          onMove={handleMove}
-          onRename={handleRename}
-          onRemove={removeSubject}
-        />
       </aside>
     </div>
+  </div>
   );
 };
 

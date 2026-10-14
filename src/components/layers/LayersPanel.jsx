@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { Layers, Eye, EyeOff, MoreVertical, X } from 'lucide-react';
+import { Layers, Eye, EyeOff, MoreVertical, X, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { getLayerEntries } from '../../domain/subjects.js';
 
 const MENU_ITEMS = [
@@ -84,7 +84,21 @@ const LayerRow = ({ entry, tag, selected, editing, onSelect, onToggleVisible, on
   );
 };
 
-const LayersPanel = ({ subjects, selectedId, onSelect, onToggleVisible, onMove, onRename, onRemove }) => {
+export const LayersRail = ({ count, onExpand }) => (
+  <button
+    type="button"
+    onClick={onExpand}
+    title="Afficher la liste des sujets"
+    aria-label="Afficher la liste des sujets"
+    className="w-10 shrink-0 border-r border-gray-800 bg-[#111] flex flex-col items-center gap-2 pt-3 text-gray-500 hover:text-white hover:bg-[#161616] transition"
+  >
+    <PanelLeftOpen size={15} />
+    <Layers size={14} />
+    <span className="text-[10px] font-mono">{count}</span>
+  </button>
+);
+
+const LayersPanel = ({ subjects, selectedId, onSelect, onToggleVisible, onMove, onRename, onRemove, onCollapse }) => {
   const [menu, setMenu] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const entries = getLayerEntries(subjects);
@@ -103,10 +117,21 @@ const LayersPanel = ({ subjects, selectedId, onSelect, onToggleVisible, onMove, 
   };
 
   return (
-    <div className="h-52 border-t border-gray-800 flex flex-col bg-[#0f0f0f]">
+    <div className="flex-1 min-h-0 flex flex-col bg-[#0f0f0f]">
       <div className="px-4 py-2 border-b border-gray-800 bg-[#151515] shrink-0 flex items-center justify-between">
-        <h2 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
-          <Layers size={11} /> Sujets ({subjects.length})
+        <h2 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2 min-w-0">
+          <button
+            type="button"
+            onClick={onCollapse}
+            title="Replier la liste des sujets"
+            aria-label="Replier la liste des sujets"
+            className="shrink-0 text-gray-500 hover:text-white transition"
+          >
+            <PanelLeftClose size={14} />
+          </button>
+          <span className="flex items-center gap-1.5 truncate">
+            <Layers size={11} /> Sujets ({subjects.length})
+          </span>
         </h2>
         {selectedId && (
           <button
@@ -115,12 +140,12 @@ const LayersPanel = ({ subjects, selectedId, onSelect, onToggleVisible, onMove, 
             title="Désélectionner"
             className="flex items-center gap-1 text-[10px] text-gray-500 hover:text-white transition"
           >
-            <X size={10} /> Désélectionner
+            <X size={10} /> Désélect.
           </button>
         )}
       </div>
 
-      <div className="flex-1 overflow-auto p-2 space-y-1">
+      <div className="flex items-center gap-1 shrink-0 text-[10px] text-gray-500 hover:text-white transition">
         {!subjects.length && <p className="text-[11px] text-gray-700 text-center p-4">Aucun sujet importé</p>}
         {entries.map((entry, index) => (
           <LayerRow
