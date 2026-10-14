@@ -70,7 +70,7 @@ const LayerRow = ({ entry, tag, selected, editing, onSelect, onToggleVisible, on
         </span>
       )}
 
-      {tag && !editing && <span className="text-[9px] text-gray-600 shrink-0">{tag}</span>}
+      {tag && !editing && <span className="text-[10px] text-gray-500 shrink-0">{tag}</span>}
 
       <button
         type="button"
@@ -119,7 +119,7 @@ const LayersPanel = ({ subjects, selectedId, onSelect, onToggleVisible, onMove, 
   return (
     <div className="flex-1 min-h-0 flex flex-col bg-[#0f0f0f]">
       <div className="px-4 py-2 border-b border-gray-800 bg-[#151515] shrink-0 flex items-center justify-between">
-        <h2 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2 min-w-0">
+        <h2 className="text-[11px] font-semibold text-gray-300 uppercase tracking-wider flex items-center gap-2 min-w-0">
           <button
             type="button"
             onClick={onCollapse}
@@ -138,15 +138,15 @@ const LayersPanel = ({ subjects, selectedId, onSelect, onToggleVisible, onMove, 
             type="button"
             onClick={() => onSelect(null)}
             title="Désélectionner"
-            className="flex items-center gap-1 text-[10px] text-gray-500 hover:text-white transition"
+            className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-white transition"
           >
             <X size={10} /> Désélect.
           </button>
         )}
       </div>
 
-      <div className="flex items-center gap-1 shrink-0 text-[10px] text-gray-500 hover:text-white transition">
-        {!subjects.length && <p className="text-[11px] text-gray-700 text-center p-4">Aucun sujet importé</p>}
+      <div className="flex items-center gap-1 shrink-0 text-[11px] text-gray-400 hover:text-white transition">
+        {!subjects.length && <p className="text-[11px] text-gray-500 text-center p-4">Aucun sujet importé</p>}
         {entries.map((entry, index) => (
           <LayerRow
             key={`${entry.id}:${entry.label}`}

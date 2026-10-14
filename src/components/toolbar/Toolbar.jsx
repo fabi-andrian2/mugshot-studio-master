@@ -113,7 +113,7 @@ const Toolbar = ({
   <header className={`${hidden ? "hidden" : "flex"} h-12 border-b border-gray-800 bg-[#111] items-center gap-2 px-3 shrink-0 z-20`}>
     <div className="flex items-center gap-2 shrink-0 mr-1">
       <Ruler size={17} className="text-emerald-400" />
-      <span className="hidden 2xl:inline font-black tracking-[0.2em] text-sm whitespace-nowrap">
+      <span className="hidden 2xl:inline font-semibold tracking-[0.2em] text-sm whitespace-nowrap">
         MUGSHOT <span className="text-emerald-400">STUDIO</span>
       </span>
     </div>

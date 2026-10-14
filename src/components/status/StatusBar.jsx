@@ -32,16 +32,16 @@ const StatusBar = ({
   }, [containerRef, workspaceRef, zoom, floorY]);
 
   return (
-    <footer className={`${hidden ? 'hidden' : 'flex'} h-8 border-t border-gray-800 bg-[#111] items-center px-4 gap-5 text-[11px] text-gray-600 shrink-0`}>
+    <footer className={`${hidden ? 'hidden' : 'flex'} h-8 border-t border-gray-800 bg-[#111] items-center px-4 gap-5 text-[11px] text-gray-500 shrink-0`}>
       <span>X <span className="text-gray-400 font-mono">{mousePos.x}px</span></span>
       <span>H <span className="text-emerald-500 font-mono">{Math.max(0, mousePos.yCm)} cm</span></span>
       <span>
-        Sujets <strong className="text-gray-300">{subjectCount}</strong>
+        Sujets <strong className="font-semibold text-gray-300">{subjectCount}</strong>
         {hiddenCount > 0 && <span className="text-amber-400"> · {hiddenCount} masqué{hiddenCount > 1 ? 's' : ''}</span>}
       </span>
       <span>{canvasW}×{canvasH} px</span>
       {selectionLabel && (
-        <span>Sélection <strong className="text-emerald-400 font-mono">{selectionLabel}</strong></span>
+        <span>Sélection <strong className="font-semibold text-emerald-400 font-mono">{selectionLabel}</strong></span>
       )}
       {measureActive ? (
         <span role="status" className="ml-auto text-amber-400 font-semibold">

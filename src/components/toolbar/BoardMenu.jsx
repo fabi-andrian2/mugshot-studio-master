@@ -8,7 +8,7 @@ import { MIN_HEIGHT_CM, MAX_HEIGHT_CM } from '../../domain/constants.js';
 import { splitFeetInches, feetInchesToCm } from '../../domain/measurement.js';
 
 const SectionTitle = ({ children }) => (
-  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{children}</p>
+  <p className="text-[11px] font-semibold text-gray-300 uppercase tracking-wider">{children}</p>
 );
 
 const ToggleRow = ({ label, active, title, onClick }) => (
@@ -167,7 +167,7 @@ const BoardMenu = ({
                     type="button"
                     disabled={mannequin.x === null}
                     onClick={onMannequinAutoX}
-                    className="text-[10px] text-gray-500 hover:text-emerald-400 transition disabled:opacity-30 disabled:cursor-not-allowed"
+                    className="text-[11px] text-gray-400 hover:text-emerald-400 transition disabled:opacity-30 disabled:cursor-not-allowed"
                   >
                     Position automatique (à gauche)
                   </button>

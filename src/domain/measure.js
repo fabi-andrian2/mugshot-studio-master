@@ -1,12 +1,13 @@
 import { CM_TO_PX } from './constants.js';
 import { formatHeight } from './measurement.js';
+import { CANVAS_FONT_FAMILY } from './typography.js';
 
 export const MIN_MEASURE_SCREEN_PX = 6;
 
 export const MEASURE_STYLE = {
   color: '#f59e0b',
   outlineColor: '#0d0d0d',
-  fontFamily: 'Arial, Helvetica, sans-serif',
+  fontFamily: CANVAS_FONT_FAMILY,
   lineWidth: 2,
   endpointRadius: 4,
   fontSize: 13,

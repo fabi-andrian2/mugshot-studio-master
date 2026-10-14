@@ -36,7 +36,7 @@ const ViewMenu = ({ availability, onView }) => {
                   className="w-full flex items-center justify-between text-left text-xs px-3 py-2 text-gray-300 hover:bg-gray-700 transition disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                 >
                   <span>{command.label}</span>
-                  <span className="text-[10px] text-gray-600">{command.hint}</span>
+                  <span className="text-[11px] text-gray-500">{command.hint}</span>
                 </button>
               );
             })}
