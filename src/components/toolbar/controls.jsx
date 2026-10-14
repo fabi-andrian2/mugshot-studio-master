@@ -1,7 +1,7 @@
 const VARIANTS = {
-  ghost: 'bg-gray-800 hover:bg-gray-700 border-gray-700 text-gray-300',
+  ghost: 'bg-gray-800 hover:bg-gray-700 active:bg-gray-600 border-gray-700 text-gray-300',
   active: 'bg-emerald-900/40 border-emerald-700 text-emerald-300',
-  primary: 'bg-emerald-600 hover:bg-emerald-500 border-emerald-500 text-white font-semibold',
+  primary: 'bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 border-emerald-500 text-white font-semibold',
 };
 
 const BASE = 'flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs border whitespace-nowrap shrink-0 transition disabled:opacity-30 disabled:cursor-not-allowed';

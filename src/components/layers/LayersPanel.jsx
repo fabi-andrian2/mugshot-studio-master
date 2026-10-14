@@ -168,7 +168,7 @@ const LayersPanel = ({ subjects, selectedId, onSelect, onToggleVisible, onMove, 
         <>
           <div className="fixed inset-0 z-40" onClick={() => setMenu(null)} />
           <div
-            className="fixed z-50 w-40 bg-[#1c1c1c] border border-gray-700 rounded-md shadow-2xl py-1"
+            className="fixed z-50 w-40 origin-top-left animate-pop-in bg-[#1c1c1c] border border-gray-700 rounded-md shadow-2xl py-1"
             style={{ left: menu.x, top: menu.y }}
           >
             {MENU_ITEMS.map((item) => (

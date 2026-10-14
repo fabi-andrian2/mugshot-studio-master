@@ -20,7 +20,7 @@ const ViewMenu = ({ availability, onView }) => {
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 bottom-full mb-1 z-50 w-52 bg-[#1c1c1c] border border-gray-700 rounded-md shadow-2xl py-1">
+          <div className="absolute right-0 bottom-full mb-1 z-50 w-52 origin-bottom-right animate-pop-in bg-[#1c1c1c] border border-gray-700 rounded-md shadow-2xl py-1">
             {VIEW_COMMANDS.map((command) => {
               const enabled = availability[command.id];
               return (
@@ -61,7 +61,7 @@ const ViewportControls = ({
   presentation = false,
   onTogglePresentation,
 }) => (
-  <div className={`absolute bottom-3 right-3 z-20 flex items-center gap-1.5 rounded-lg border border-gray-800 bg-[#111]/95 p-1.5 shadow-2xl ${presentation ? 'opacity-70 hover:opacity-100' : ''}`}>    <ToolButton icon={ZoomOut} title="Zoom arrière" onClick={onZoomOut} />
+  <div className={`absolute bottom-3 right-3 z-20 flex items-center gap-1.5 rounded-lg border border-gray-800 bg-[#111]/95 p-1.5 shadow-2xl transition-opacity ${presentation ? 'opacity-70 hover:opacity-100' : ''}`}>    <ToolButton icon={ZoomOut} title="Zoom arrière" onClick={onZoomOut} />
     <button
       type="button"
       onClick={onResetView}

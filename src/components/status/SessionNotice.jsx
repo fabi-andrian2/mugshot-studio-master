@@ -23,7 +23,7 @@ const SessionNotice = ({ phase, problem, saveStatus, restored, onDiscard }) => {
         </p>
         <button
           type="button"
-          className="mt-2 rounded border border-gray-600 px-3 py-1 text-xs hover:bg-[#1c1c1c]"
+          className="mt-2 rounded border border-gray-600 px-3 py-1 text-xs transition hover:bg-[#1c1c1c]"
           onClick={() => {
             if (
               window.confirm(

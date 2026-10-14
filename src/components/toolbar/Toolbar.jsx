@@ -56,7 +56,7 @@ const ArrangeMenu = ({ disabled, onArrange }) => {
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-full mt-1 z-50 w-60 bg-[#1c1c1c] border border-gray-700 rounded-md shadow-2xl py-1">
+          <div className="absolute left-0 top-full mt-1 z-50 w-60 origin-top-left animate-pop-in bg-[#1c1c1c] border border-gray-700 rounded-md shadow-2xl py-1">
             {ARRANGE_COMMANDS.map((command) => (
               <button
                 key={command.id}
