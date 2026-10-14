@@ -847,7 +847,7 @@ const MugshotStudio = () => {
               canvasW={canvasW}
               canvasH={canvasH}
             />
-            <Grid canvasW={canvasW} canvasH={canvasH} showGrid={board.showGrid} />
+            <Grid canvasW={canvasW} canvasH={canvasH} showGrid={board.showGrid} background={board.background} />
             <MannequinLayer geometry={mannequinGeometry} canvasW={canvasW} canvasH={canvasH} />
 
             {subjects.map((s) => (
