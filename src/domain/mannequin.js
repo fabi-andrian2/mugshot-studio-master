@@ -1,5 +1,6 @@
 import { CM_TO_PX, MIN_HEIGHT_CM, MAX_HEIGHT_CM } from './constants.js';
 import { formatHeight } from './measurement.js';
+import { CANVAS_FONT_FAMILY } from './typography.js';
 
 export const MANNEQUIN_VIEWBOX = { width: 200, height: 400 };
 
@@ -22,7 +23,7 @@ const EDGE_MARGIN = 150;
 const LABEL_GAP = 16;
 const LABEL_MIN_Y = 30;
 const LABEL_FONT_SIZE = 26;
-const LABEL_FONT_FAMILY = 'Arial, Helvetica, sans-serif';
+const LABEL_FONT_FAMILY = CANVAS_FONT_FAMILY;
 
 export const DEFAULT_MANNEQUIN = {
   visible: false,

@@ -45,7 +45,7 @@ const ActionButton = ({ icon: Icon, label, onClick, active = false, danger = fal
 
 const SilhouetteControls = ({ silhouette, onSilhouette }) => (
   <div className="space-y-2 pt-1">
-    <span className="text-[10px] text-gray-500 uppercase tracking-wider">Couleur de silhouette</span>
+    <span className="text-[10px] text-gray-400 uppercase tracking-wider">Couleur de silhouette</span>
     <div className="flex items-center gap-1.5 flex-wrap">
       {SILHOUETTE_PRESETS.map(preset => (
         <button
@@ -73,7 +73,7 @@ const SilhouetteControls = ({ silhouette, onSilhouette }) => (
       />
     </div>
     <div className="flex items-center justify-between">
-      <span className="text-[10px] text-gray-500 uppercase tracking-wider">Opacité</span>
+      <span className="text-[10px] text-gray-400 uppercase tracking-wider">Opacité</span>
       <span className="text-[11px] font-mono text-gray-400">{Math.round(silhouette.opacity * 100)} %</span>
     </div>
     <input
@@ -123,7 +123,7 @@ const NameField = ({ subject, onRename }) => {
         title="Entrée : valider · Échap : annuler"
         className="w-full bg-[#1a1a1a] border border-gray-700 hover:border-gray-500 focus:border-emerald-500 rounded-md px-3 py-2 text-sm font-semibold text-white outline-none transition-colors"
       />
-      <p className="text-[10px] text-gray-600 truncate" title={subject.fileName}>
+      <p className="text-[11px] text-gray-500 truncate" title={subject.fileName}>
         Fichier : {subject.fileName}
       </p>
     </div>
@@ -151,12 +151,12 @@ const Inspector = ({
     return (
       <>
         <div className="px-4 py-3 border-b border-gray-800 bg-[#151515]">
-          <h2 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Inspecteur</h2>
+          <h2 className="text-[11px] font-semibold text-gray-300 uppercase tracking-wider">Inspecteur</h2>
         </div>
-        <div className="flex-1 flex flex-col items-center justify-center text-center px-6 gap-3 text-gray-600">
+        <div className="flex-1 flex flex-col items-center justify-center text-center px-6 gap-3 text-gray-500">
           <ImageIcon size={32} className="opacity-30" />
           <p className="text-xs text-gray-400">Aucun sujet sélectionné</p>
-          <p className="text-[11px] text-gray-600">
+          <p className="text-[11px] text-gray-500">
             Clique sur un sujet du canvas ou de la liste pour afficher sa mesure, sa position et son apparence.
           </p>
         </div>
@@ -175,7 +175,7 @@ const Inspector = ({
   return (
     <>
       <div className="px-4 py-3 border-b border-gray-800 bg-[#151515]">
-        <h2 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Inspecteur</h2>
+        <h2 className="text-[11px] font-semibold text-gray-300 uppercase tracking-wider">Inspecteur</h2>
       </div>
 
       <div className="flex-1 overflow-auto">
@@ -246,7 +246,7 @@ const Inspector = ({
               <span className="w-2 h-2 rounded-full bg-emerald-500" /> Appui (pied)
             </span>
           </div>
-          <p className="text-[10px] text-gray-600 leading-snug">
+          <p className="text-[11px] text-gray-500 leading-snug">
             Mesurée du repère d'appui au repère de tête. Glisse les repères sur le canvas pour les corriger.
           </p>
 
@@ -278,7 +278,7 @@ const Inspector = ({
             <button
               type="button"
               onClick={() => onApply({ scale: 1 })}
-              className="text-[10px] text-gray-500 hover:text-emerald-400 transition"
+              className="text-[11px] text-gray-400 hover:text-emerald-400 transition"
             >
               Taille d'origine (100 %)
             </button>
@@ -313,7 +313,7 @@ const Inspector = ({
               onCancel={onCancelEdit}
             />
           </div>
-          <p className="text-[10px] text-gray-600 leading-snug">
+          <p className="text-[11px] text-gray-500 leading-snug">
             Y est la hauteur du repère d'appui au-dessus du sol (0 = posé au sol).
           </p>
           <button
@@ -350,7 +350,7 @@ const Inspector = ({
             <SilhouetteControls silhouette={silhouette} onSilhouette={onSilhouette} />
           )}
 
-          <p className="text-[10px] text-gray-600 leading-snug">
+          <p className="text-[11px] text-gray-500 leading-snug">
             La silhouette ne change ni la hauteur ni les repères. Elle apparaît aussi à l'export.
           </p>
         </Section>
@@ -384,7 +384,7 @@ const Inspector = ({
             {SHORTCUTS.map(([keys, action]) => (
               <li key={keys} className="flex justify-between gap-2">
                 <span className="text-gray-400 font-mono">{keys}</span>
-                <span className="text-gray-600 text-right">{action}</span>
+                <span className="text-gray-500 text-right">{action}</span>
               </li>
             ))}
           </ul>

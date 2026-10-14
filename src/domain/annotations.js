@@ -1,10 +1,11 @@
 import { getSubjectGeometry, getSubjectHeightCm } from './geometry.js';
 import { formatHeight } from './measurement.js';
+import { CANVAS_FONT_FAMILY } from './typography.js';
 import { isSubjectVisible } from './appearance.js';
 
 export const ANNOTATION_STYLE = {
   fontSize: 30,
-  fontFamily: 'Arial, Helvetica, sans-serif',
+  fontFamily: CANVAS_FONT_FAMILY,
   lineWidth: 4,
   haloWidth: 7,
   haloColor: '#f2f2f4',

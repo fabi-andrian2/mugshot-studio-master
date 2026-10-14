@@ -759,7 +759,7 @@ const MugshotStudio = () => {
   }, [measure.active]);
 
   return (
-    <div className="flex flex-col h-screen bg-[#0d0d0d] text-gray-200 font-sans overflow-hidden select-none">
+    <div className="flex flex-col h-screen bg-[#0d0d0d] text-gray-200 font-sans antialiased overflow-hidden select-none">
       <SessionNotice
         phase={phase}
         problem={problem}
@@ -946,7 +946,7 @@ const MugshotStudio = () => {
                 style={{ paddingTop: canvasH * 0.25 }}
               >
                 <Upload size={64} className="text-gray-400 opacity-10 mb-3" />
-                <p className="text-gray-400 text-3xl font-black opacity-10 tracking-widest">
+                <p className="text-gray-400 text-3xl font-semibold opacity-10 tracking-widest">
                   GLISSE DES IMAGES ICI
                 </p>
               </div>

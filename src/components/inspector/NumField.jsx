@@ -53,7 +53,7 @@ const NumField = ({ value, onChange, onCommit, onCancel, unit = '', min, max, st
 
   return (
     <div className="flex flex-col gap-1">
-      {label && <span className="text-[10px] text-gray-500 uppercase tracking-wider">{label}</span>}
+      {label && <span className="text-[10px] text-gray-400 uppercase tracking-wider">{label}</span>}
       <div
         className={`relative flex items-center bg-[#1a1a1a] border border-gray-700 rounded-md
                    hover:border-gray-500 focus-within:border-emerald-500 transition-colors ${dims.box}`}
