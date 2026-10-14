@@ -5,7 +5,13 @@ import {
   isSubjectVisible,
   getExportableSubjects,
 } from '../src/domain/appearance.js';
-import { DEFAULT_SECTIONS, toggleSection } from '../src/domain/panels.js';
+import {
+  DEFAULT_SECTIONS,
+  PANEL_BREAKPOINT_PX,
+  getInitialPanelLayout,
+  toggleLayersPanel,
+  toggleSection,
+} from '../src/domain/panels.js';
 import { DEFAULT_ANNOTATIONS, getAnnotationItems } from '../src/domain/annotations.js';
 import { arrangeSubjects } from '../src/domain/layout.js';
 import {
@@ -219,4 +225,20 @@ test('hauteur 150 → 180 → 200 : repères intacts', () => {
     assert.equal(next.groundAnchor, base.groundAnchor);
     assert.equal(next.headAnchor, base.headAnchor);
   });
+});
+
+test('panneaux : liste des sujets ouverte seulement sur une fenêtre large', () => {
+  assert.equal(getInitialPanelLayout(PANEL_BREAKPOINT_PX).layersOpen, true);
+  assert.equal(getInitialPanelLayout(1920).layersOpen, true);
+  assert.equal(getInitialPanelLayout(PANEL_BREAKPOINT_PX - 1).layersOpen, false);
+  assert.equal(getInitialPanelLayout(undefined).layersOpen, false);
+  assert.equal(getInitialPanelLayout(NaN).layersOpen, false);
+});
+
+test('panneaux : bascule de la liste des sujets sans muter', () => {
+  const open = getInitialPanelLayout(1600);
+  const closed = toggleLayersPanel(open);
+  assert.equal(closed.layersOpen, false);
+  assert.equal(open.layersOpen, true);
+  assert.equal(toggleLayersPanel(closed).layersOpen, true);
 });

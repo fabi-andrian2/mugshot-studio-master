@@ -43,6 +43,51 @@ const ActionButton = ({ icon: Icon, label, onClick, active = false, danger = fal
   );
 };
 
+const SilhouetteControls = ({ silhouette, onSilhouette }) => (
+  <div className="space-y-2 pt-1">
+    <span className="text-[10px] text-gray-500 uppercase tracking-wider">Couleur de silhouette</span>
+    <div className="flex items-center gap-1.5 flex-wrap">
+      {SILHOUETTE_PRESETS.map(preset => (
+        <button
+          key={preset.value}
+          type="button"
+          title={preset.label}
+          aria-label={preset.label}
+          aria-pressed={silhouette.color === preset.value}
+          onClick={() => onSilhouette({ color: preset.value })}
+          className={`w-6 h-6 rounded border transition ${
+            silhouette.color === preset.value
+              ? 'ring-2 ring-emerald-400 border-transparent'
+              : 'border-gray-600 hover:border-gray-400'
+          }`}
+          style={{ backgroundColor: preset.value }}
+        />
+      ))}
+      <input
+        type="color"
+        value={silhouette.color}
+        title="Couleur personnalisée"
+        aria-label="Couleur personnalisée"
+        onChange={e => onSilhouette({ color: e.target.value })}
+        className="w-6 h-6 p-0 bg-transparent border border-gray-600 rounded cursor-pointer"
+      />
+    </div>
+    <div className="flex items-center justify-between">
+      <span className="text-[10px] text-gray-500 uppercase tracking-wider">Opacité</span>
+      <span className="text-[11px] font-mono text-gray-400">{Math.round(silhouette.opacity * 100)} %</span>
+    </div>
+    <input
+      type="range"
+      min={MIN_SILHOUETTE_OPACITY}
+      max="1"
+      step="0.05"
+      value={silhouette.opacity}
+      onChange={e => onSilhouette({ opacity: parseFloat(e.target.value) })}
+      className="w-full h-1 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+    />
+  </div>
+);
+
 const NameField = ({ subject, onRename }) => {
   const [draft, setDraft] = useState(subject.name);
   const skipCommit = useRef(false);
@@ -300,139 +345,9 @@ const Inspector = ({
               onClick={() => onApply({ silhouette: !subject.silhouette })}
             />
           </div>
+          
           {subject.silhouette && (
-            <div className="space-y-2 pt-1">
-              <span className="text-[10px] text-gray-500 uppercase tracking-wider">Couleur de silhouette</span>
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {SILHOUETTE_PRESETS.map(preset => (
-                  <button
-                    key={preset.value}
-                    type="button"
-                    title={preset.label}
-                    aria-label={preset.label}
-                    aria-pressed={silhouette.color === preset.value}
-                    onClick={() => onSilhouette({ color: preset.value })}
-                    className={`w-6 h-6 rounded border transition ${
-                      silhouette.color === preset.value
-                        ? 'ring-2 ring-emerald-400 border-transparent'
-                        : 'border-gray-600 hover:border-gray-400'
-                    }`}
-                    style={{ backgroundColor: preset.value }}
-                  />
-                ))}
-                <input
-                  type="color"
-                  value={silhouette.color}
-                  title="Couleur personnalisée"
-                  aria-label="Couleur personnalisée"
-                  onChange={e => onSilhouette({ color: e.target.value })}
-                  className="w-6 h-6 p-0 bg-transparent border border-gray-600 rounded cursor-pointer"
-                />
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] text-gray-500 uppercase tracking-wider">Opacité</span>
-                <span className="text-[11px] font-mono text-gray-400">{Math.round(silhouette.opacity * 100)} %</span>
-              </div>
-              <input
-                type="range"
-                min={MIN_SILHOUETTE_OPACITY}
-                max="1"
-                step="0.05"
-                value={silhouette.opacity}
-                onChange={e => onSilhouette({ opacity: parseFloat(e.target.value) })}
-                className="w-full h-1 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-              />
-            </div>
-          )}
-
-          {subject.silhouette && (
-            <div className="space-y-2 pt-1">
-              <span className="text-[10px] text-gray-500 uppercase tracking-wider">Couleur de silhouette</span>
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {SILHOUETTE_PRESETS.map(preset => (
-                  <button
-                    key={preset.value}
-                    type="button"
-                    title={preset.label}
-                    aria-label={preset.label}
-                    aria-pressed={silhouette.color === preset.value}
-                    onClick={() => onSilhouette({ color: preset.value })}
-                    className={`w-6 h-6 rounded border transition ${
-                      silhouette.color === preset.value
-                        ? 'ring-2 ring-emerald-400 border-transparent'
-                        : 'border-gray-600 hover:border-gray-400'
-                    }`}
-                    style={{ backgroundColor: preset.value }}
-                  />
-                ))}
-                <input
-                  type="color"
-                  value={silhouette.color}
-                  title="Couleur personnalisée"
-                  aria-label="Couleur personnalisée"
-                  onChange={e => onSilhouette({ color: e.target.value })}
-                  className="w-6 h-6 p-0 bg-transparent border border-gray-600 rounded cursor-pointer"
-                />
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] text-gray-500 uppercase tracking-wider">Opacité</span>
-                <span className="text-[11px] font-mono text-gray-400">{Math.round(silhouette.opacity * 100)} %</span>
-              </div>
-              <input
-                type="range"
-                min={MIN_SILHOUETTE_OPACITY}
-                max="1"
-                step="0.05"
-                value={silhouette.opacity}
-                onChange={e => onSilhouette({ opacity: parseFloat(e.target.value) })}
-                className="w-full h-1 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-              />
-            </div>
-          )}
-
-          {subject.silhouette && (
-            <div className="space-y-2 pt-1">
-              <span className="text-[10px] text-gray-500 uppercase tracking-wider">Couleur de silhouette</span>
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {SILHOUETTE_PRESETS.map(preset => (
-                  <button
-                    key={preset.value}
-                    type="button"
-                    title={preset.label}
-                    aria-label={preset.label}
-                    aria-pressed={silhouette.color === preset.value}
-                    onClick={() => onSilhouette({ color: preset.value })}
-                    className={`w-6 h-6 rounded border transition ${
-                      silhouette.color === preset.value
-                        ? 'ring-2 ring-emerald-400 border-transparent'
-                        : 'border-gray-600 hover:border-gray-400'
-                    }`}
-                    style={{ backgroundColor: preset.value }}
-                  />
-                ))}
-                <input
-                  type="color"
-                  value={silhouette.color}
-                  title="Couleur personnalisée"
-                  aria-label="Couleur personnalisée"
-                  onChange={e => onSilhouette({ color: e.target.value })}
-                  className="w-6 h-6 p-0 bg-transparent border border-gray-600 rounded cursor-pointer"
-                />
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] text-gray-500 uppercase tracking-wider">Opacité</span>
-                <span className="text-[11px] font-mono text-gray-400">{Math.round(silhouette.opacity * 100)} %</span>
-              </div>
-              <input
-                type="range"
-                min={MIN_SILHOUETTE_OPACITY}
-                max="1"
-                step="0.05"
-                value={silhouette.opacity}
-                onChange={e => onSilhouette({ opacity: parseFloat(e.target.value) })}
-                className="w-full h-1 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-              />
-            </div>
+            <SilhouetteControls silhouette={silhouette} onSilhouette={onSilhouette} />
           )}
 
           <p className="text-[10px] text-gray-600 leading-snug">
