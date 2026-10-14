@@ -12,6 +12,7 @@ const StatusBar = ({
   selectionLabel,
   canvasW,
   canvasH,
+  hidden = false,
 }) => {
   const [mousePos, setMousePos] = useState({ x: 0, yCm: 0 });
 
@@ -31,7 +32,7 @@ const StatusBar = ({
   }, [containerRef, workspaceRef, zoom, floorY]);
 
   return (
-    <footer className="h-8 border-t border-gray-800 bg-[#111] flex items-center px-4 gap-5 text-[11px] text-gray-600 shrink-0">
+    <footer className={`${hidden ? 'hidden' : 'flex'} h-8 border-t border-gray-800 bg-[#111] items-center px-4 gap-5 text-[11px] text-gray-600 shrink-0`}>
       <span>X <span className="text-gray-400 font-mono">{mousePos.x}px</span></span>
       <span>H <span className="text-emerald-500 font-mono">{Math.max(0, mousePos.yCm)} cm</span></span>
       <span>

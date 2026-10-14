@@ -84,13 +84,13 @@ const LayerRow = ({ entry, tag, selected, editing, onSelect, onToggleVisible, on
   );
 };
 
-export const LayersRail = ({ count, onExpand }) => (
+export const LayersRail = ({ count, onExpand, hidden = false }) => (
   <button
     type="button"
     onClick={onExpand}
     title="Afficher la liste des sujets"
     aria-label="Afficher la liste des sujets"
-    className="w-10 shrink-0 border-r border-gray-800 bg-[#111] flex flex-col items-center gap-2 pt-3 text-gray-500 hover:text-white hover:bg-[#161616] transition"
+    className={`${hidden ? 'hidden' : 'flex'} w-10 shrink-0 border-r border-gray-800 bg-[#111] flex-col items-center gap-2 pt-3 text-gray-500 hover:text-white hover:bg-[#161616] transition`}
   >
     <PanelLeftOpen size={15} />
     <Layers size={14} />
