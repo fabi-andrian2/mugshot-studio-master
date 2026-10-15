@@ -1,6 +1,9 @@
 import { useRef, useState } from 'react';
-import { Layers, Eye, EyeOff, MoreVertical, X, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
-import { getLayerEntries } from '../../domain/subjects.js';
+import { Layers, Eye, EyeOff, MoreVertical, X, PanelLeftClose, PanelLeftOpen, GripVertical } from 'lucide-react';
+import { getLayerEntries, getLayerDropSlot, getLayerIndexForDrop } from '../../domain/subjects.js';
+
+const LAYER_DRAG_TYPE = 'application/x-mugshot-layer';
+const isLayerDrag = (e) => Array.from(e.dataTransfer?.types ?? []).includes(LAYER_DRAG_TYPE);
 
 const MENU_ITEMS = [
   { id: 'rename', label: 'Renommer' },
@@ -11,7 +14,24 @@ const MENU_ITEMS = [
   { id: 'remove', label: 'Supprimer', danger: true },
 ];
 
-const LayerRow = ({ entry, tag, selected, editing, onSelect, onToggleVisible, onOpenMenu, onStartEdit, onRename, onStopEdit }) => {
+const LayerRow = ({
+  entry,
+  tag,
+  selected,
+  editing,
+  reorderable,
+  dragging,
+  dropBefore,
+  dropAfter,
+  onSelect,
+  onToggleVisible,
+  onOpenMenu,
+  onStartEdit,
+  onRename,
+  onStopEdit,
+  onDragStart,
+  onDragEnd,
+}) => {
   const [draft, setDraft] = useState(entry.label);
   const skipCommit = useRef(false);
 
@@ -29,10 +49,25 @@ const LayerRow = ({ entry, tag, selected, editing, onSelect, onToggleVisible, on
     <div
       onClick={() => onSelect(entry.id)}
       onDoubleClick={onStartEdit}
-      className={`flex items-center gap-1.5 px-1.5 py-1.5 rounded-md cursor-pointer text-xs border transition ${
+      data-layer-row
+      className={`relative flex items-center gap-1.5 px-1.5 py-1.5 rounded-md cursor-pointer text-xs border transition ${
         selected ? 'bg-emerald-900/40 border-emerald-800/50 text-emerald-300' : 'hover:bg-gray-800 text-gray-400 border-transparent'
-      }`}
+      } ${dragging ? 'opacity-40' : ''}`}
     >
+      {dropBefore && <div className="pointer-events-none absolute inset-x-0 -top-[3px] h-0.5 rounded bg-emerald-400" />}
+      {dropAfter && <div className="pointer-events-none absolute inset-x-0 -bottom-[3px] h-0.5 rounded bg-emerald-400" />}
+      {reorderable && (
+        <span
+          draggable
+          title="Glisser pour réorganiser"
+          aria-label="Glisser pour réorganiser"
+          onDragStart={(e) => onDragStart(e, entry.id)}
+          onDragEnd={onDragEnd}
+          className="shrink-0 -ml-0.5 cursor-grab active:cursor-grabbing text-gray-600 hover:text-gray-300 transition"
+        >
+          <GripVertical size={12} />
+        </span>
+      )}
       <button
         type="button"
         title={entry.visible ? 'Masquer' : 'Afficher'}
@@ -98,10 +133,59 @@ export const LayersRail = ({ count, onExpand, hidden = false }) => (
   </button>
 );
 
-const LayersPanel = ({ subjects, selectedId, onSelect, onToggleVisible, onMove, onRename, onRemove, onCollapse }) => {
+const LayersPanel = ({ subjects, selectedId, onSelect, onToggleVisible, onMove, onReorder, onRename, onRemove, onCollapse }) => {
   const [menu, setMenu] = useState(null);
   const [editingId, setEditingId] = useState(null);
+  const [dragId, setDragId] = useState(null);
+  const [dropSlot, setDropSlot] = useState(null);
+  const listRef = useRef(null);
   const entries = getLayerEntries(subjects);
+  const dragIndex = entries.findIndex((entry) => entry.id === dragId);
+  const reorderable = entries.length > 1;
+
+  const resetDrag = () => {
+    setDragId(null);
+    setDropSlot(null);
+  };
+
+  const slotFromPointer = (clientY) => {
+    const rows = listRef.current ? Array.from(listRef.current.querySelectorAll('[data-layer-row]')) : [];
+    const middles = rows.map((row) => {
+      const rect = row.getBoundingClientRect();
+      return rect.top + rect.height / 2;
+    });
+    return getLayerDropSlot(middles, clientY);
+  };
+
+  const handleDragStart = (e, id) => {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData(LAYER_DRAG_TYPE, id);
+    const row = e.currentTarget.closest('[data-layer-row]');
+    if (row) e.dataTransfer.setDragImage(row, 16, 14);
+    setDragId(id);
+  };
+
+  const handleListDragOver = (e) => {
+    if (!isLayerDrag(e) || dragId === null) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const slot = slotFromPointer(e.clientY);
+    setDropSlot(getLayerIndexForDrop(dragIndex, slot) === dragIndex ? null : slot);
+  };
+
+  const handleListDragLeave = (e) => {
+    if (!listRef.current?.contains(e.relatedTarget)) setDropSlot(null);
+  };
+
+  const handleListDrop = (e) => {
+    if (!isLayerDrag(e) || dragId === null) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const target = getLayerIndexForDrop(dragIndex, slotFromPointer(e.clientY));
+    const id = dragId;
+    resetDrag();
+    if (target !== dragIndex) onReorder(id, target);
+  };
 
   const openMenu = (e, id) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -145,7 +229,13 @@ const LayersPanel = ({ subjects, selectedId, onSelect, onToggleVisible, onMove, 
         )}
       </div>
 
-      <div className="flex items-center gap-1 shrink-0 text-[11px] text-gray-400 hover:text-white transition">
+      <div
+        ref={listRef}
+        onDragOver={handleListDragOver}
+        onDragLeave={handleListDragLeave}
+        onDrop={handleListDrop}
+        className="flex-1 min-h-0 overflow-auto p-2 space-y-1"
+      >
         {!subjects.length && <p className="text-[11px] text-gray-500 text-center p-4">Aucun sujet importé</p>}
         {entries.map((entry, index) => (
           <LayerRow
@@ -154,12 +244,18 @@ const LayersPanel = ({ subjects, selectedId, onSelect, onToggleVisible, onMove, 
             tag={entries.length > 1 ? (index === 0 ? 'Premier plan' : index === entries.length - 1 ? 'Arrière-plan' : '') : ''}
             selected={selectedId === entry.id}
             editing={editingId === entry.id}
+            reorderable={reorderable}
+            dragging={dragId === entry.id}
+            dropBefore={dropSlot === index}
+            dropAfter={dropSlot === entries.length && index === entries.length - 1}
             onSelect={onSelect}
             onToggleVisible={onToggleVisible}
             onOpenMenu={openMenu}
             onStartEdit={() => setEditingId(entry.id)}
             onRename={onRename}
             onStopEdit={() => setEditingId(null)}
+            onDragStart={handleDragStart}
+            onDragEnd={resetDrag}
           />
         ))}
       </div>

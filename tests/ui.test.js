@@ -19,6 +19,9 @@ import {
   renameSubject,
   toggleVisibility,
   reorderSubject,
+  moveSubjectToLayerIndex,
+  getLayerDropSlot,
+  getLayerIndexForDrop,
   getLayerEntries,
   getSelectionLabel,
 } from '../src/domain/subjects.js';
@@ -215,6 +218,83 @@ test('ordre : zIndex de 1 à n, bords inchangés, sujet masqué conserve sa plac
   assert.deepEqual(result.map((s) => s.zIndex).sort(), [1, 2]);
   assert.equal(result.find((s) => s.id === 'b').visible, false);
   assert.equal(areSubjectListsEqual(reorderSubject(result, 'b', 'front'), result), true);
+});
+
+const layerOrder = (subjects) => getLayerEntries(subjects).map((entry) => entry.id).join('');
+const makeLayers = () => ['a', 'b', 'c', 'd'].map((id, i) => make(id, id.toUpperCase(), { zIndex: i + 1, x: 100 * (i + 1) }));
+
+test('glisser-déposer : vers le haut, vers le bas et vers une position intermédiaire', () => {
+  const list = makeLayers();
+  assert.equal(layerOrder(list), 'dcba');
+  assert.equal(layerOrder(moveSubjectToLayerIndex(list, 'a', 0)), 'adcb');
+  assert.equal(layerOrder(moveSubjectToLayerIndex(list, 'd', 3)), 'cbad');
+  assert.equal(layerOrder(moveSubjectToLayerIndex(list, 'd', 2)), 'cbda');
+  assert.equal(layerOrder(moveSubjectToLayerIndex(list, 'a', 2)), 'dcab');
+});
+
+test('glisser-déposer : mêmes résultats que Premier plan, Arrière-plan, Avancer et Reculer', () => {
+  const list = makeLayers();
+  list.forEach((subject, from) => {
+    assert.deepEqual(moveSubjectToLayerIndex(list, subject.id, 0), reorderSubject(list, subject.id, 'front'));
+    assert.deepEqual(moveSubjectToLayerIndex(list, subject.id, list.length - 1), reorderSubject(list, subject.id, 'back'));
+    const shown = list.length - 1 - from;
+    assert.deepEqual(moveSubjectToLayerIndex(list, subject.id, shown - 1), reorderSubject(list, subject.id, 'forward'));
+    assert.deepEqual(moveSubjectToLayerIndex(list, subject.id, shown + 1), reorderSubject(list, subject.id, 'backward'));
+  });
+});
+
+test('glisser-déposer : zIndex de 1 à n sans doublon, seule la profondeur change', () => {
+  const list = makeLayers().map((subject) => Object.freeze({ ...subject }));
+  Object.freeze(list);
+  const result = moveSubjectToLayerIndex(list, 'b', 0);
+
+  assert.deepEqual(result.map((s) => s.zIndex).sort(), [1, 2, 3, 4]);
+  assert.deepEqual(result.map((s) => s.id), list.map((s) => s.id));
+  const withoutDepth = (subject) => Object.fromEntries(Object.entries(subject).filter(([key]) => key !== 'zIndex'));
+  result.forEach((subject, i) => {
+    assert.deepEqual(withoutDepth(subject), withoutDepth(list[i]));
+  });
+  assert.equal(result.find((s) => s.id === 'b').zIndex, 4);
+});
+
+test('glisser-déposer : sujet masqué et géométrie conservés', () => {
+  const list = [make('a', 'A', { zIndex: 1 }), toggleVisibility(make('b', 'B', { zIndex: 2, x: 900 }))];
+  const result = moveSubjectToLayerIndex(list, 'b', 1);
+  assert.equal(layerOrder(result), 'ab');
+  assert.equal(result.find((s) => s.id === 'b').visible, false);
+  list.forEach((subject) => {
+    const after = result.find((s) => s.id === subject.id);
+    assert.deepEqual(getSubjectGeometry(after, FLOOR_Y), getSubjectGeometry(subject, FLOOR_Y));
+  });
+});
+
+test('glisser-déposer : liste vide, un seul sujet, identifiant inconnu, indice invalide, même position', () => {
+  const empty = [];
+  assert.equal(moveSubjectToLayerIndex(empty, 'a', 0), empty);
+
+  const single = [make('a', 'A')];
+  assert.equal(moveSubjectToLayerIndex(single, 'a', 0), single);
+  assert.equal(moveSubjectToLayerIndex(single, 'a', 5), single);
+
+  const list = makeLayers();
+  assert.equal(moveSubjectToLayerIndex(list, 'inconnu', 0), list);
+  [Number.NaN, 1.5, undefined, null, '1'].forEach((bad) => {
+    assert.equal(moveSubjectToLayerIndex(list, 'a', bad), list);
+  });
+  assert.equal(moveSubjectToLayerIndex(list, 'c', 1), list);
+  assert.equal(layerOrder(moveSubjectToLayerIndex(list, 'a', -5)), 'adcb');
+  assert.equal(layerOrder(moveSubjectToLayerIndex(list, 'd', 99)), 'cbad');
+});
+
+test('glisser-déposer : emplacement de dépôt et indice final', () => {
+  const middles = [10, 30, 50];
+  assert.deepEqual([5, 20, 40, 60].map((y) => getLayerDropSlot(middles, y)), [0, 1, 2, 3]);
+  assert.equal(getLayerDropSlot([], 12), 0);
+
+  assert.deepEqual([0, 1, 2, 3].map((slot) => getLayerIndexForDrop(1, slot)), [0, 1, 1, 2]);
+  assert.equal(getLayerIndexForDrop(0, 3), 2);
+  assert.equal(getLayerIndexForDrop(2, 0), 0);
+  assert.equal(getLayerIndexForDrop(2, 3), 2);
 });
 
 test('hauteur 150 → 180 → 200 : repères intacts', () => {

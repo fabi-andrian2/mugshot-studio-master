@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createHistoryState, historyReducer } from '../src/hooks/useHistory.js';
-import { areSubjectListsEqual, getLayerEntries } from '../src/domain/subjects.js';
+import { areSubjectListsEqual, getLayerEntries, moveSubjectToLayerIndex } from '../src/domain/subjects.js';
 import { updateSilhouette } from '../src/domain/appearance.js';
 import { getSubjectGeometry, getSubjectHeightCm } from '../src/domain/geometry.js';
 import { getExportLayers } from '../src/domain/exportPlan.js';
@@ -247,4 +247,27 @@ test('intégrité : le reducer ne mute jamais ses états, même figés', () => {
   assert.equal(historyReducer(state, { type: 'patchAll', fn: (list) => list }), state);
   assert.equal(frozen.past.length, 0);
   assert.equal(frozen.present[0].silhouetteColor, undefined);
+});
+
+test('intégrité : un glisser-déposer de calque = une entrée, annulable et rétablissable', () => {
+  const list = [make('a', { zIndex: 1 }), make('b', { zIndex: 2 }), make('c', { zIndex: 3 })];
+  const order = (state) => getLayerEntries(state.present).map((entry) => entry.id).join('');
+  let state = createHistoryState(list);
+
+  state = apply(state, (current) => moveSubjectToLayerIndex(current, 'a', 0));
+  assert.equal(order(state), 'acb');
+  assert.equal(state.past.length, 1);
+
+  const undone = historyReducer(state, { type: 'undo' });
+  assert.equal(order(undone), 'cba');
+  assert.deepEqual(undone.present, list);
+
+  const redone = historyReducer(undone, { type: 'redo' });
+  assert.equal(order(redone), 'acb');
+  assert.deepEqual(redone.present, state.present);
+
+  const unchanged = apply(state, (current) => moveSubjectToLayerIndex(current, 'a', 0));
+  assert.equal(unchanged.past.length, 1);
+  const unknown = apply(state, (current) => moveSubjectToLayerIndex(current, 'zzz', 0));
+  assert.equal(unknown.past.length, 1);
 });

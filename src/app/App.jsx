@@ -26,6 +26,7 @@ import {
   createSubject,
   renameSubject,
   reorderSubject,
+  moveSubjectToLayerIndex,
   toggleVisibility,
   getSelectionLabel,
 } from "../domain/subjects.js";
@@ -399,6 +400,13 @@ const MugshotStudio = () => {
   const handleMove = useCallback(
     (id, move) => {
       apply((list) => reorderSubject(list, id, move));
+    },
+    [apply],
+  );
+
+  const handleReorder = useCallback(
+    (id, layerIndex) => {
+      apply((list) => moveSubjectToLayerIndex(list, id, layerIndex));
     },
     [apply],
   );
@@ -830,6 +838,7 @@ const MugshotStudio = () => {
               onSelect={setSelectedId}
               onToggleVisible={handleToggleVisible}
               onMove={handleMove}
+              onReorder={handleReorder}
               onRename={handleRename}
               onRemove={removeSubject}
               onCollapse={() => setLayout(toggleLayersPanel)}

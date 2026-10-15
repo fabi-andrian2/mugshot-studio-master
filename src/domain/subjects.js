@@ -47,6 +47,11 @@ export const renameSubject = (subject, newName) => {
 
 export const toggleVisibility = (subject) => ({ ...subject, visible: subject.visible === false });
 
+const withSequentialZIndex = (subjects, ascending) => {
+  const zById = new Map(ascending.map((subject, i) => [subject.id, i + 1]));
+  return subjects.map((subject) => ({ ...subject, zIndex: zById.get(subject.id) }));
+};
+
 export const reorderSubject = (subjects, id, move) => {
   const ordered = [...subjects].sort((a, b) => a.zIndex - b.zIndex);
   const from = ordered.findIndex((subject) => subject.id === id);
@@ -64,9 +69,26 @@ export const reorderSubject = (subjects, id, move) => {
 
   const [item] = ordered.splice(from, 1);
   ordered.splice(to, 0, item);
-  const zById = new Map(ordered.map((subject, i) => [subject.id, i + 1]));
-  return subjects.map((subject) => ({ ...subject, zIndex: zById.get(subject.id) }));
+  return withSequentialZIndex(subjects, ordered);
 };
+
+export const moveSubjectToLayerIndex = (subjects, id, layerIndex) => {
+  const frontFirst = [...subjects].sort((a, b) => b.zIndex - a.zIndex);
+  const from = frontFirst.findIndex((subject) => subject.id === id);
+  if (from === -1 || !Number.isInteger(layerIndex)) return subjects;
+
+  const to = Math.min(frontFirst.length - 1, Math.max(0, layerIndex));
+  if (to === from) return subjects;
+
+  const [item] = frontFirst.splice(from, 1);
+  frontFirst.splice(to, 0, item);
+  return withSequentialZIndex(subjects, frontFirst.reverse());
+};
+
+export const getLayerDropSlot = (rowMiddles, pointerY) =>
+  rowMiddles.filter((middle) => pointerY > middle).length;
+
+export const getLayerIndexForDrop = (fromIndex, slot) => (slot > fromIndex ? slot - 1 : slot);
 
 export const getLayerEntries = (subjects) =>
   [...subjects]
