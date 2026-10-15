@@ -513,7 +513,7 @@ const MugshotStudio = () => {
 
   useEffect(() => {
     const onKey = (e) => {
-      if (phase === "loading") return;
+      if (phase === "loading" || showSettings) return;
       const key = e.key.toLowerCase();
       const mod = e.ctrlKey || e.metaKey;
 
@@ -524,6 +524,7 @@ const MugshotStudio = () => {
         return;
       }
 
+      if (presentation) return;
       if (e.target.tagName === "INPUT") return;
       if (measure.active) return;
 
@@ -588,6 +589,8 @@ const MugshotStudio = () => {
     return () => window.removeEventListener("keydown", onKey);
   }, [
     phase,
+    showSettings,
+    presentation,
     selectedId,
     measure.active,
     activeMeasureIds,
