@@ -6,7 +6,7 @@ const Section = ({ title, open, onToggle, summary, children }) => (
       type="button"
       onClick={onToggle}
       aria-expanded={open}
-      className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-[#161616] transition"
+      className="w-full flex items-center justify-between px-4 py-2 hover:bg-[#161616] transition"
     >
       <span className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-300 uppercase tracking-wider">
         {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
@@ -14,7 +14,7 @@ const Section = ({ title, open, onToggle, summary, children }) => (
       </span>
       {!open && summary && <span className="text-[11px] font-mono text-gray-400 truncate ml-2">{summary}</span>}
     </button>
-    {open && <div className="px-4 pb-4 space-y-3 animate-fade-in">{children}</div>}
+    {open && <div className="px-4 pb-3 space-y-2.5 animate-fade-in">{children}</div>}
   </section>
 );
 

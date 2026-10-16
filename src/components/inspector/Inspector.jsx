@@ -36,7 +36,7 @@ const ActionButton = ({ icon: Icon, label, onClick, active = false, danger = fal
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-md text-xs border transition ${tone}`}
+      className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-xs border transition ${tone}`}
     >
       <Icon size={12} /> {label}
     </button>
@@ -121,7 +121,7 @@ const NameField = ({ subject, onRename }) => {
           }
         }}
         title="Entrée : valider · Échap : annuler"
-        className="w-full bg-[#1a1a1a] border border-gray-700 hover:border-gray-500 focus:border-emerald-500 rounded-md px-3 py-2 text-sm font-semibold text-white outline-none transition-colors"
+        className="w-full bg-[#1a1a1a] border border-gray-700 hover:border-gray-500 focus:border-emerald-500 rounded-md px-3 py-1.5 text-sm font-semibold text-white outline-none transition-colors"
       />
       <p className="text-[11px] text-gray-500 truncate" title={subject.fileName}>
         Fichier : {subject.fileName}
@@ -150,7 +150,7 @@ const Inspector = ({
   if (!subject) {
     return (
       <>
-        <div className="px-4 py-3 border-b border-gray-800 bg-[#151515]">
+        <div className="px-4 py-2.5 border-b border-gray-800 bg-[#151515]">
           <h2 className="text-[11px] font-semibold text-gray-300 uppercase tracking-wider">Inspecteur</h2>
         </div>
         <div className="flex-1 flex flex-col items-center justify-center text-center px-6 gap-3 text-gray-500">
@@ -179,7 +179,7 @@ const Inspector = ({
       </div>
 
       <div className="flex-1 overflow-auto">
-        <div className="px-4 py-4 border-b border-gray-800 space-y-2">
+        <div className="px-4 py-3 border-b border-gray-800 space-y-1.5">
           <NameField key={`${subject.id}:${subject.name}`} subject={subject} onRename={onRename} />
           {!shown && (
             <p className="text-[11px] text-amber-400">Sujet masqué : absent du canvas et de l'export.</p>
@@ -236,33 +236,46 @@ const Inspector = ({
             </div>
           )}
 
-          <p className="text-[11px] text-gray-500 font-mono">≈ {formatHeight(heightCm, otherUnit)}</p>
-
-          <div className="flex items-center gap-4 text-[11px] text-gray-400">
-            <span className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-sky-400" /> Tête
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-500" /> Appui (pied)
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[11px]">
+            <span className="text-gray-500 font-mono">≈ {formatHeight(heightCm, otherUnit)}</span>
+            <span className="flex items-center gap-3 text-gray-400">
+              <span className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-sky-400" /> Tête
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500" /> Appui (pied)
+              </span>
             </span>
           </div>
           <p className="text-[11px] text-gray-500 leading-snug">
-            Mesurée du repère d'appui au repère de tête. Glisse les repères sur le canvas pour les corriger.
+            Du repère d'appui au repère de tête. Glisse-les sur le canvas pour les corriger.
           </p>
 
-          <div className="space-y-1.5 pt-1">
-            <NumField
-              label="Échelle"
-              value={parseFloat((subject.scale * 100).toFixed(1))}
-              step={1}
-              min={limits.min * 100}
-              max={limits.max * 100}
-              decimals={1}
-              unit="%"
-              onChange={v => onPreview({ scale: v / 100 })}
-              onCommit={v => onApply({ scale: v / 100 })}
-              onCancel={onCancelEdit}
-            />
+          <div className="space-y-1.5">
+            <div className="flex items-end gap-2">
+              <div className="flex-1 min-w-0">
+                <NumField
+                  label="Échelle"
+                  value={parseFloat((subject.scale * 100).toFixed(1))}
+                  step={1}
+                  min={limits.min * 100}
+                  max={limits.max * 100}
+                  decimals={1}
+                  unit="%"
+                  onChange={v => onPreview({ scale: v / 100 })}
+                  onCommit={v => onApply({ scale: v / 100 })}
+                  onCancel={onCancelEdit}
+                />
+              </div>
+              <button
+                type="button"
+                title="Revenir à la taille d'origine (100 %)"
+                onClick={() => onApply({ scale: 1 })}
+                className="shrink-0 h-8 px-2.5 rounded-md text-[11px] border border-gray-700 bg-gray-800 hover:bg-gray-700 text-gray-300 transition"
+              >
+                Origine
+              </button>
+            </div>
             <input
               type="range"
               min={limits.min}
@@ -275,13 +288,6 @@ const Inspector = ({
               onKeyUp={onEndGesture}
               onBlur={onEndGesture}
             />
-            <button
-              type="button"
-              onClick={() => onApply({ scale: 1 })}
-              className="text-[11px] text-gray-400 hover:text-emerald-400 transition"
-            >
-              Taille d'origine (100 %)
-            </button>
           </div>
         </Section>
 
@@ -314,12 +320,12 @@ const Inspector = ({
             />
           </div>
           <p className="text-[11px] text-gray-500 leading-snug">
-            Y est la hauteur du repère d'appui au-dessus du sol (0 = posé au sol).
+            Y : hauteur de l'appui au-dessus du sol (0 = posé au sol).
           </p>
           <button
             type="button"
             onClick={() => onApply({ y: 0 })}
-            className="w-full bg-gray-800 hover:bg-gray-700 border border-gray-700 text-xs py-2 rounded-md text-gray-300 transition"
+            className="w-full bg-gray-800 hover:bg-gray-700 border border-gray-700 text-xs py-1.5 rounded-md text-gray-300 transition"
           >
             Recaler au sol
           </button>
@@ -347,12 +353,13 @@ const Inspector = ({
           </div>
           
           {subject.silhouette && (
-            <SilhouetteControls silhouette={silhouette} onSilhouette={onSilhouette} />
+            <>
+              <SilhouetteControls silhouette={silhouette} onSilhouette={onSilhouette} />
+              <p className="text-[11px] text-gray-500 leading-snug">
+                La silhouette ne change ni la hauteur ni les repères. Elle apparaît aussi à l'export.
+              </p>
+            </>
           )}
-
-          <p className="text-[11px] text-gray-500 leading-snug">
-            La silhouette ne change ni la hauteur ni les repères. Elle apparaît aussi à l'export.
-          </p>
         </Section>
 
         <Section
