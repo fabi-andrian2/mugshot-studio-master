@@ -2,7 +2,11 @@ export const DEFAULT_BACKGROUND_COLOR = '#f2f2f4';
 
 export const DEFAULT_BACKGROUND = { color: DEFAULT_BACKGROUND_COLOR, image: null };
 
-export const DEFAULT_BOARD = { background: DEFAULT_BACKGROUND, showGrid: true };
+export const DEFAULT_BOARD_TITLE = 'Comparaison de tailles';
+
+export const MAX_BOARD_TITLE_LENGTH = 60;
+
+export const DEFAULT_BOARD = { background: DEFAULT_BACKGROUND, showGrid: true, title: DEFAULT_BOARD_TITLE };
 
 export const BACKGROUND_PRESETS = [
   { value: '#f2f2f4', label: 'Gris clair (défaut)' },
@@ -26,6 +30,17 @@ export const setBackgroundImage = (board, image) => {
   }
   if (!image || !(image.width > 0) || !(image.height > 0)) return board;
   return { ...board, background: { ...board.background, image } };
+};
+
+export const normalizeBoardTitle = (value) => {
+  if (typeof value !== 'string') return DEFAULT_BOARD_TITLE;
+  return Array.from(value.replace(/\p{Cc}+/gu, ' ')).slice(0, MAX_BOARD_TITLE_LENGTH).join('');
+};
+
+export const setBoardTitle = (board, title) => {
+  if (typeof title !== 'string') return board;
+  const next = normalizeBoardTitle(title);
+  return next === board.title ? board : { ...board, title: next };
 };
 
 export const toggleGrid = (board) => ({ ...board, showGrid: !board.showGrid });

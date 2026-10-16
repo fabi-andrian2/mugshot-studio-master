@@ -1,8 +1,11 @@
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 import { FLOOR_MARGIN } from '../../domain/constants.js';
 import { getGridCmTicks, getGridInchTicks } from '../../domain/gridScale.js';
 import { getGridPalette } from '../../domain/gridContrast.js';
 import { CANVAS_FONT_FAMILY, BOARD_TITLE_FONT_FAMILY } from '../../domain/typography.js';
+import { DEFAULT_BOARD_TITLE } from '../../domain/board.js';
+import { getBoardTitleLayout } from '../../domain/boardTitle.js';
+import { measureTitleGlyphs } from '../../services/textMeasure.js';
 
 const CASING_EXTRA = 2.5;
 const TEXT_HALO_WIDTH = 4;
@@ -63,14 +66,29 @@ const buildGridElements = (canvasW, canvasH, showGrid, palette) => {
   return els;
 };
 
-const Grid = memo(function Grid({ canvasW, canvasH, showGrid = true, background }) {
+const Grid = memo(function Grid({ canvasW, canvasH, showGrid = true, background, title = DEFAULT_BOARD_TITLE }) {
   const floorY = canvasH - FLOOR_MARGIN;
   const palette = getGridPalette(background);
+  const titleLayout = useMemo(() => getBoardTitleLayout(title, canvasW, measureTitleGlyphs), [title, canvasW]);
   return (
     <svg className="absolute inset-0 pointer-events-none" data-export-grid="true"
       width={canvasW} height={canvasH} viewBox={`0 0 ${canvasW} ${canvasH}`}
       fontFamily={CANVAS_FONT_FAMILY}>
-      {haloedText(palette, { x: canvasW / 2, y: 60, fontSize: 38, fill: palette.head, fontWeight: '900', textAnchor: 'middle', fontFamily: BOARD_TITLE_FONT_FAMILY, letterSpacing: 3 }, 'MUGSHOT STUDIO — PLANCHE DE TAILLE')}
+      {titleLayout.lines.map((line, index) =>
+        haloedText(palette, {
+          key: `title-${index}`,
+          'data-board-title': index,
+          x: canvasW / 2,
+          y: line.y,
+          fontSize: line.fontSize,
+          fill: palette.head,
+          fontWeight: '900',
+          textAnchor: 'middle',
+          fontFamily: BOARD_TITLE_FONT_FAMILY,
+          letterSpacing: line.letterSpacing,
+          ...(line.textLength && { textLength: line.textLength, lengthAdjust: 'spacingAndGlyphs' }),
+        }, line.text),
+      )}
       {haloedText(palette, { x: 120, y: 55, fontSize: 16, fill: palette.sub, fontWeight: 'bold' }, 'FEET / IN')}
       {haloedText(palette, { x: canvasW - 120, y: 55, fontSize: 16, fill: palette.sub, fontWeight: 'bold', textAnchor: 'end' }, 'FEET / IN')}
       {haloedText(palette, { x: 120, y: 76, fontSize: 16, fill: palette.sub }, 'CM')}

@@ -3,7 +3,7 @@ import { Palette, ChevronDown } from 'lucide-react';
 import { ToolButton } from './controls.jsx';
 import BackgroundImageField from './BackgroundImageField.jsx';
 import NumField from '../inspector/NumField.jsx';
-import { BACKGROUND_PRESETS } from '../../domain/board.js';
+import { BACKGROUND_PRESETS, DEFAULT_BOARD_TITLE, MAX_BOARD_TITLE_LENGTH } from '../../domain/board.js';
 import { MIN_HEIGHT_CM, MAX_HEIGHT_CM } from '../../domain/constants.js';
 import { splitFeetInches, feetInchesToCm } from '../../domain/measurement.js';
 
@@ -35,6 +35,7 @@ const BoardMenu = ({
   onImageFiles,
   onRemoveImage,
   onToggleGrid,
+  onTitle,
   unit,
   mannequin,
   mannequinX,
@@ -49,7 +50,7 @@ const BoardMenu = ({
 
   return (
     <div className="relative">
-      <ToolButton icon={Palette} label="Planche" title="Fond, grille et étalon" onClick={() => setOpen(o => !o)}>
+      <ToolButton icon={Palette} label="Planche" title="Titre, fond, grille et étalon" onClick={() => setOpen(o => !o)}>
         <ChevronDown size={11} />
       </ToolButton>
 
@@ -57,6 +58,29 @@ const BoardMenu = ({
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
           <div className="absolute right-0 top-full mt-1 z-50 w-64 origin-top-right animate-pop-in max-h-[80vh] overflow-auto bg-[#1c1c1c] border border-gray-700 rounded-md shadow-2xl p-3 space-y-4">
+            <div className="space-y-2">
+              <SectionTitle>Titre de la planche</SectionTitle>
+              <input
+                type="text"
+                value={board.title}
+                maxLength={MAX_BOARD_TITLE_LENGTH}
+                placeholder="Aucun titre"
+                aria-label="Titre de la planche"
+                onChange={(e) => onTitle(e.target.value)}
+                className="w-full h-8 px-2 rounded-md bg-[#111] border border-gray-700 focus:border-emerald-600 text-xs text-gray-200 placeholder:text-gray-600 outline-none transition"
+              />
+              <div className="flex items-center justify-between text-[11px] text-gray-500">
+                <span className="font-mono">{Array.from(board.title).length}/{MAX_BOARD_TITLE_LENGTH}</span>
+                <button
+                  type="button"
+                  disabled={board.title === DEFAULT_BOARD_TITLE}
+                  onClick={() => onTitle(DEFAULT_BOARD_TITLE)}
+                  className="text-gray-400 hover:text-emerald-400 transition disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  Titre par défaut
+                </button>
+              </div>
+            </div>
             <div className="space-y-2">
               <SectionTitle>Fond uni</SectionTitle>
               <div className="flex items-center gap-1.5 flex-wrap">

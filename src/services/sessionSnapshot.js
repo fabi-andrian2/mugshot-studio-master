@@ -1,5 +1,5 @@
 import { CANVAS_LIMITS, MIN_HEIGHT_CM, MAX_HEIGHT_CM } from '../domain/constants.js';
-import { isValidColor } from '../domain/board.js';
+import { isValidColor, normalizeBoardTitle } from '../domain/board.js';
 import { SCHEMA_VERSION } from './persistence.js';
 
 export class SnapshotError extends Error {
@@ -93,6 +93,9 @@ const checkData = (data) => {
 
   if (!isObject(board) || typeof board.showGrid !== 'boolean' || !isObject(board.background)) {
     return fail('Planche invalide.');
+  }
+  if (board.title !== undefined && typeof board.title !== 'string') {
+    return fail('Titre de planche invalide.');
   }
   if (!isValidColor(board.background.color)) return fail('Couleur de fond invalide.');
   const image = board.background.image;
@@ -207,6 +210,7 @@ export const serializeSession = async (state, { fetchBlob = defaultFetchBlob } =
       unit: state.unit,
       board: {
         showGrid: board.showGrid,
+        title: normalizeBoardTitle(board.title),
         background: {
           color: background.color,
           image: background.image
@@ -292,6 +296,7 @@ export const restoreSession = async (
         subjects: restoredSubjects,
         board: {
           showGrid: board.showGrid,
+          title: normalizeBoardTitle(board.title),
           background: { color: board.background.color, image: restoredImage },
         },
         annotations: { enabled: annotations.enabled, scope: annotations.scope },

@@ -43,6 +43,7 @@ import {
   setBackgroundColor,
   setBackgroundImage,
   toggleGrid,
+  setBoardTitle,
 } from "../domain/board.js";
 import useDocumentHistory from "../hooks/useDocumentHistory.js";
 import useCanvasNavigation from "../hooks/useCanvasNavigation.js";
@@ -707,6 +708,8 @@ const MugshotStudio = () => {
 
   const handleToggleGrid = () => setBoard((current) => toggleGrid(current));
 
+  const handleBoardTitle = (title) => setBoard((current) => setBoardTitle(current, title));
+
   const handleSilhouette = (patch) => {
     apply(
       list => list.map(s => s.id === selectedId ? updateSilhouette(s, patch) : s),
@@ -816,6 +819,7 @@ const MugshotStudio = () => {
           onBackgroundImageFiles={handleBackgroundFiles}
           onRemoveBackgroundImage={() => applyBackgroundImage(null)}
           onToggleGrid={handleToggleGrid}
+          onBoardTitle={handleBoardTitle}
           mannequin={mannequin}
           mannequinX={resolveMannequinX(mannequin)}
           onToggleMannequin={handleToggleMannequin}
@@ -900,7 +904,7 @@ const MugshotStudio = () => {
               canvasW={canvasW}
               canvasH={canvasH}
             />
-            <Grid canvasW={canvasW} canvasH={canvasH} showGrid={board.showGrid} background={board.background} />
+            <Grid canvasW={canvasW} canvasH={canvasH} showGrid={board.showGrid} background={board.background} title={board.title} />
             <MannequinLayer geometry={mannequinGeometry} canvasW={canvasW} canvasH={canvasH} />
 
             {subjects.map((s) => (
