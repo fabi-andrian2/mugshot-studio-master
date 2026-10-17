@@ -30,7 +30,7 @@ import {
   toggleVisibility,
   getSelectionLabel,
 } from "../domain/subjects.js";
-import { pickImageFile } from "../domain/fileDrop.js";
+import { pickImageFile, getImportMessage } from "../domain/fileDrop.js";
 import { renderBoard, downloadCanvasAsPng } from "../services/export.js";
 import { importImageFiles } from "../services/imageImport.js";
 import {
@@ -48,6 +48,7 @@ import {
 import useDocumentHistory from "../hooks/useDocumentHistory.js";
 import useCanvasNavigation from "../hooks/useCanvasNavigation.js";
 import useFullscreen from "../hooks/useFullscreen.js";
+import useFileDropZone from "../hooks/useFileDropZone.js";
 import useSessionPersistence from "../hooks/useSessionPersistence.js";
 import SessionNotice from "../components/status/SessionNotice.jsx";
 import {
@@ -285,13 +286,19 @@ const MugshotStudio = () => {
 
   const handleFileUpload = useCallback(
     async (fileList) => {
-      const { images, failed } = await importImageFiles(fileList);
-      if (failed.length) {
-        window.alert(
-          `Fichiers non importés (image invalide) :\n${failed.join("\n")}`,
-        );
+      const { images, rejected, unreadable } = await importImageFiles(fileList);
+      const message = getImportMessage({
+        imported: images.length,
+        rejected,
+        unreadable,
+      });
+      if (!images.length) {
+        if (message) window.alert(message);
+        return;
       }
-      if (!images.length) return;
+      if (message) {
+        requestAnimationFrame(() => setTimeout(() => window.alert(message), 0));
+      }
       apply((list) => {
         const topZ = list.reduce((max, s) => Math.max(max, s.zIndex), 0);
         const created = images.map((image, i) =>
@@ -317,49 +324,9 @@ const MugshotStudio = () => {
     [subjects, apply, canvasW, floorY],
   );
 
-  const handleDrop = (e) => {
-    e.preventDefault();
-    handleFileUpload(e.dataTransfer.files);
-  };
-
-
-  const dragDepth = useRef(0);
-  const [dropState, setDropState] = useState(null);
-
-  const hasFiles = (e) =>
-    Array.from(e.dataTransfer?.types ?? []).includes("Files");
-
-  const getDropState = (e) => {
-    const items = Array.from(e.dataTransfer?.items ?? []).filter(
-      (item) => item.kind === "file",
-    );
-    const allInvalid =
-      items.length > 0 &&
-      items.every((item) => item.type && !item.type.startsWith("image/"));
-    return allInvalid ? "reject" : "accept";
-  };
-
-  const handleDragEnter = (e) => {
-    if (!hasFiles(e)) return;
-    dragDepth.current += 1;
-    setDropState(getDropState(e));
-  };
-
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    if (hasFiles(e)) setDropState(getDropState(e));
-  };
-
-  const handleDragLeave = (e) => {
-    if (!hasFiles(e)) return;
-    dragDepth.current = Math.max(0, dragDepth.current - 1);
-    if (dragDepth.current === 0) setDropState(null);
-  };
-
-  const clearDropState = () => {
-    dragDepth.current = 0;
-    setDropState(null);
-  };
+  const { dropState, ignoredCount, dropProps } = useFileDropZone({
+    onFiles: handleFileUpload,
+  });
 
   const removeSubject = useCallback(
     (id) => {
@@ -864,13 +831,7 @@ const MugshotStudio = () => {
                 ? "grabbing"
                 : "default",
           }}
-          onDragEnter={handleDragEnter}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={(e) => {
-            clearDropState();
-            handleDrop(e);
-          }}
+          {...dropProps}
           onMouseDown={(e) => {
             if (e.button === 0) {
               if (
@@ -971,23 +932,31 @@ const MugshotStudio = () => {
 
           {dropState && (
             <div
-              className={`absolute inset-3 z-30 pointer-events-none rounded-lg border-2 border-dashed flex items-center justify-center ${
+              role="status"
+              className={`absolute inset-3 z-30 pointer-events-none rounded-lg border-2 border-dashed flex items-center justify-center animate-fade-in ${
                 dropState === "reject"
-                  ? "border-red-500/70 bg-red-950/40"
-                  : "border-emerald-500/70 bg-emerald-950/40"
+                  ? "border-red-500/70 bg-red-950/25"
+                  : "border-emerald-500/70 bg-emerald-950/20"
               }`}
             >
               <div className="flex items-center gap-2 rounded-md border border-gray-700 bg-[#111] px-4 py-2 text-sm text-gray-100 shadow-2xl">
                 {dropState === "reject" ? (
-                  <X size={16} className="text-red-400" />
+                  <X size={16} className="shrink-0 text-red-400" />
                 ) : (
-                  <Upload size={16} className="text-emerald-400" />
+                  <Upload size={16} className="shrink-0 text-emerald-400" />
                 )}
-                <span>
-                  {dropState === "reject"
-                    ? "Fichier non pris en charge : seules les images sont importées"
-                    : "Déposer les images pour importer"}
-                </span>
+                <div>
+                  <p>
+                    {dropState === "reject"
+                      ? "Dépôt refusé : aucune image dans ces fichiers"
+                      : "Déposer les images pour importer"}
+                  </p>
+                  {dropState === "accept" && ignoredCount > 0 && (
+                    <p className="text-[11px] text-gray-400">
+                      {ignoredCount} fichier{ignoredCount > 1 ? "s" : ""} non image ignoré{ignoredCount > 1 ? "s" : ""}
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
           )}

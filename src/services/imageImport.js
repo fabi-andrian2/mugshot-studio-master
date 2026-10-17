@@ -1,4 +1,5 @@
 import { analyzeImage } from './imageBounds.js';
+import { partitionDroppedFiles } from '../domain/fileDrop.js';
 
 const readImageFile = async (file) => {
   const url = URL.createObjectURL(file);
@@ -13,16 +14,15 @@ const readImageFile = async (file) => {
 };
 
 export const importImageFiles = async (fileList) => {
-  const files = Array.from(fileList);
-  const imageFiles = files.filter((file) => file.type.startsWith('image/'));
-  const failed = files.filter((file) => !file.type.startsWith('image/')).map((file) => file.name);
+  const { candidates, rejected } = partitionDroppedFiles(fileList);
 
-  const results = await Promise.allSettled(imageFiles.map(readImageFile));
+  const results = await Promise.allSettled(candidates.map(readImageFile));
   const images = [];
+  const unreadable = [];
   results.forEach((result, index) => {
     if (result.status === 'fulfilled') images.push(result.value);
-    else failed.push(imageFiles[index].name);
+    else unreadable.push(candidates[index].name);
   });
 
-  return { images, failed };
+  return { images, rejected, unreadable };
 };
