@@ -1,7 +1,7 @@
 import { memo, useMemo } from 'react';
 import { FLOOR_MARGIN } from '../../domain/constants.js';
 import { getGridCmTicks, getGridInchTicks } from '../../domain/gridScale.js';
-import { getGridPalette } from '../../domain/gridContrast.js';
+import { FLOOR_SHADOW_FALLOFF, getGridPalette } from '../../domain/gridContrast.js';
 import { CANVAS_FONT_FAMILY, BOARD_TITLE_FONT_FAMILY } from '../../domain/typography.js';
 import { DEFAULT_BOARD_TITLE } from '../../domain/board.js';
 import { getBoardTitleLayout } from '../../domain/boardTitle.js';
@@ -9,6 +9,7 @@ import { measureTitleGlyphs } from '../../services/textMeasure.js';
 
 const CASING_EXTRA = 2.5;
 const TEXT_HALO_WIDTH = 4;
+const FLOOR_SHADOW_ID = 'floor-shadow';
 
 const haloedText = (palette, { key, ...props }, children) => (
   <text
@@ -93,11 +94,18 @@ const Grid = memo(function Grid({ canvasW, canvasH, showGrid = true, background,
       {haloedText(palette, { x: canvasW - 120, y: 55, fontSize: 16, fill: palette.sub, fontWeight: 'bold', textAnchor: 'end' }, 'FEET / IN')}
       {haloedText(palette, { x: 120, y: 76, fontSize: 16, fill: palette.sub }, 'CM')}
       {haloedText(palette, { x: canvasW - 120, y: 76, fontSize: 16, fill: palette.sub, textAnchor: 'end' }, 'CM')}
-      {haloedText(palette, { x: canvasW / 2, y: canvasH - 10, fontSize: 14, fill: palette.caption, textAnchor: 'middle' }, `${canvasW} × ${canvasH} px`)}
+      <defs>
+        <linearGradient id={FLOOR_SHADOW_ID} x1="0" y1="0" x2="0" y2="1">
+          {FLOOR_SHADOW_FALLOFF.map(([offset, weight]) => (
+            <stop key={offset} offset={offset} stopColor={palette.floorShadow} stopOpacity={palette.floorShadowStrength * weight} />
+          ))}
+        </linearGradient>
+      </defs>
       {buildGridElements(canvasW, canvasH, showGrid, palette)}
-      <rect x="0" y={floorY} width={canvasW} height={canvasH - floorY} fill="#c8c8cc" />
-      <line x1="0" y1={floorY} x2={canvasW} y2={floorY} stroke="#000" strokeWidth="6" />
-      <text x={canvasW / 2} y={floorY + 34} fontSize="24" fill="#333" fontWeight="bold" textAnchor="middle">▲ SOL — 0 cm ▲</text>
+      <rect x="0" y={floorY} width={canvasW} height={canvasH - floorY} fill={`url(#${FLOOR_SHADOW_ID})`} data-floor-shadow="true" />
+      {haloedText(palette, { x: canvasW / 2, y: canvasH - 10, fontSize: 14, fill: palette.caption, textAnchor: 'middle' }, `${canvasW} × ${canvasH} px`)}
+      {casedLine(palette, 'floor', 0, canvasW, floorY, palette.ink, 6)}
+      {haloedText(palette, { x: canvasW / 2, y: floorY + 34, fontSize: 24, fill: palette.ink, fontWeight: 'bold', textAnchor: 'middle' }, '▲ SOL — 0 cm ▲')}
     </svg>
   );
 });

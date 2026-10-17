@@ -2,7 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  FLOOR_SHADOW_FALLOFF,
   GRID_PALETTES,
+  getFloorShadowOpacity,
   getGridPalette,
   getGridTone,
   getRelativeLuminance,
@@ -82,4 +84,90 @@ test('palette : suit les changements de fond de la planche', () => {
   assert.equal(getGridTone(withImage.background), 'image');
   const removed = setBackgroundImage(withImage, null);
   assert.equal(getGridTone(removed.background), 'dark');
+});
+
+const hexToRgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+const rgbToHex = (rgb) => `#${rgb.map((c) => Math.round(c).toString(16).padStart(2, '0')).join('')}`;
+const blend = (background, overlay, opacity) => {
+  const base = hexToRgb(background);
+  const top = hexToRgb(overlay);
+  return rgbToHex(base.map((c, i) => c * (1 - opacity) + top[i] * opacity));
+};
+const shadowed = (background, palette, position) =>
+  blend(background, palette.floorShadow, getFloorShadowOpacity(palette, position));
+const withHalo = (background, palette) => blend(background, palette.halo, palette.haloOpacity);
+
+const LABEL_POSITION = 34 / 200;
+const CAPTION_POSITION = 190 / 200;
+
+const GRAY_SCAN = Array.from({ length: 52 }, (_, i) => {
+  const v = Math.min(255, i * 5).toString(16).padStart(2, '0');
+  return `#${v}${v}${v}`;
+});
+
+test('ombre de contact : ombre sombre dans chaque palette, jamais une zone éclaircie', () => {
+  for (const [tone, palette] of Object.entries(GRID_PALETTES)) {
+    assert.match(palette.floorShadow, /^#[0-9a-f]{6}$/i, tone);
+    assert.ok(getRelativeLuminance(palette.floorShadow) < 0.05, `${tone} sombre`);
+    assert.ok(palette.floorShadowStrength > 0 && palette.floorShadowStrength <= 0.6, `${tone} force`);
+    for (const color of GRAY_SCAN) {
+      const tint = shadowed(color, palette, 0);
+      assert.ok(getRelativeLuminance(tint) <= getRelativeLuminance(color) + 1e-9, `${tone} ${color}`);
+    }
+  }
+});
+
+test('ombre de contact : la plus marquée sous la ligne, estompée jusqu\'à disparaître en bas', () => {
+  assert.equal(FLOOR_SHADOW_FALLOFF[0][0], 0);
+  assert.equal(FLOOR_SHADOW_FALLOFF[0][1], 1);
+  assert.equal(FLOOR_SHADOW_FALLOFF.at(-1)[0], 1);
+  assert.equal(FLOOR_SHADOW_FALLOFF.at(-1)[1], 0);
+  for (let i = 1; i < FLOOR_SHADOW_FALLOFF.length; i += 1) {
+    assert.ok(FLOOR_SHADOW_FALLOFF[i][0] > FLOOR_SHADOW_FALLOFF[i - 1][0]);
+    assert.ok(FLOOR_SHADOW_FALLOFF[i][1] < FLOOR_SHADOW_FALLOFF[i - 1][1]);
+  }
+  for (const palette of Object.values(GRID_PALETTES)) {
+    let previous = Infinity;
+    for (let t = 0; t <= 1.0001; t += 0.05) {
+      const opacity = getFloorShadowOpacity(palette, t);
+      assert.ok(opacity <= previous + 1e-12, `t=${t}`);
+      previous = opacity;
+    }
+    assert.ok(Math.abs(getFloorShadowOpacity(palette, 0) - palette.floorShadowStrength) < 1e-12);
+    assert.equal(getFloorShadowOpacity(palette, 1), 0);
+    assert.ok(getFloorShadowOpacity(palette, 0.5) < palette.floorShadowStrength * 0.25);
+  }
+});
+
+test('ombre de contact : ombre visible mais discrète sur fond clair, sans masquer le fond', () => {
+  const palette = GRID_PALETTES.light;
+  for (const color of ['#f2f2f4', '#ffffff', '#e9e4d8']) {
+    const edge = contrast(shadowed(color, palette, 0), color);
+    assert.ok(edge >= 1.3, `visible ${color}`);
+    assert.ok(edge <= 3, `discrète ${color}`);
+    assert.equal(shadowed(color, palette, 1), color);
+  }
+});
+
+test('ombre de contact : libellé SOL et légende lisibles sur toute la gamme de gris, halo compris', () => {
+  for (const color of GRAY_SCAN) {
+    const palette = getGridPalette({ color, image: null });
+    const label = shadowed(color, palette, LABEL_POSITION);
+    const caption = shadowed(color, palette, CAPTION_POSITION);
+    assert.ok(contrast(palette.ink, label) >= 3, `SOL sans halo ${color}`);
+    assert.ok(contrast(palette.ink, withHalo(label, palette)) >= 7, `SOL avec halo ${color}`);
+    assert.ok(contrast(palette.caption, caption) >= 3, `légende sans halo ${color}`);
+    assert.ok(contrast(palette.caption, withHalo(caption, palette)) >= 7, `légende avec halo ${color}`);
+  }
+});
+
+test('ombre de contact : gris moyen #808080, légende et libellé lisibles', () => {
+  const color = '#808080';
+  assert.equal(getGridTone({ color, image: null }), 'light');
+  const palette = getGridPalette({ color, image: null });
+  const caption = shadowed(color, palette, CAPTION_POSITION);
+  const label = shadowed(color, palette, LABEL_POSITION);
+  assert.ok(contrast(palette.caption, caption) >= 4);
+  assert.ok(contrast(palette.caption, withHalo(caption, palette)) >= 9);
+  assert.ok(contrast(palette.ink, label) >= 3.5);
 });

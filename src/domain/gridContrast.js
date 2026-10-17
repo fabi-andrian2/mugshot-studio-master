@@ -10,14 +10,20 @@ const LIGHT_BACKGROUND_PALETTE = {
   label: '#555555',
   head: '#111111',
   sub: '#333333',
-  caption: '#777777',
+  caption: '#1a1a1a',
   halo: '#ffffff',
   haloOpacity: 0.5,
+  floorShadow: '#000000',
+  floorShadowStrength: 0.28,
 };
 
 export const GRID_PALETTES = {
   light: LIGHT_BACKGROUND_PALETTE,
-  image: { ...LIGHT_BACKGROUND_PALETTE, haloOpacity: 0.75 },
+  image: {
+    ...LIGHT_BACKGROUND_PALETTE,
+    haloOpacity: 0.75,
+    floorShadowStrength: 0.38,
+  },
   dark: {
     strong: '#e6e6e6',
     mid: '#bdbdbd',
@@ -26,10 +32,32 @@ export const GRID_PALETTES = {
     label: '#d0d0d0',
     head: '#f5f5f5',
     sub: '#dcdcdc',
-    caption: '#a8a8a8',
+    caption: '#e6e6e6',
     halo: '#000000',
     haloOpacity: 0.5,
+    floorShadow: '#000000',
+    floorShadowStrength: 0.5,
   },
+};
+
+export const FLOOR_SHADOW_FALLOFF = [
+  [0, 1],
+  [0.18, 0.55],
+  [0.45, 0.18],
+  [0.75, 0.04],
+  [1, 0],
+];
+
+export const getFloorShadowOpacity = (palette, position) => {
+  const t = Math.min(1, Math.max(0, position));
+  for (let i = 1; i < FLOOR_SHADOW_FALLOFF.length; i += 1) {
+    const [x1, y1] = FLOOR_SHADOW_FALLOFF[i];
+    if (t <= x1) {
+      const [x0, y0] = FLOOR_SHADOW_FALLOFF[i - 1];
+      return palette.floorShadowStrength * (y0 + ((y1 - y0) * (t - x0)) / (x1 - x0));
+    }
+  }
+  return 0;
 };
 
 const toLinear = (channel) =>
