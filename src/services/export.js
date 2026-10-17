@@ -8,7 +8,7 @@ import loadImage from './loadImage.js';
 
 const DOWNLOAD_URL_LIFETIME_MS = 10000;
 
-const drawBackground = async (ctx, background, canvasW, canvasH) => {
+export const drawBackground = async (ctx, background, canvasW, canvasH, load = loadImage) => {
   ctx.fillStyle = background.color;
   ctx.fillRect(0, 0, canvasW, canvasH);
 
@@ -16,12 +16,12 @@ const drawBackground = async (ctx, background, canvasW, canvasH) => {
 
   let img;
   try {
-    img = await loadImage(background.image.url);
+    img = await load(background.image.url);
   } catch (error) {
     throw new Error(`Image de fond illisible (${background.image.fileName ?? 'sans nom'}).`, { cause: error });
   }
 
-  const rect = getCoverRect(img.naturalWidth, img.naturalHeight, canvasW, canvasH);
+  const rect = getCoverRect(img.naturalWidth, img.naturalHeight, canvasW, canvasH, background.image.framing);
   ctx.drawImage(img, rect.left, rect.top, rect.width, rect.height);
 };
 

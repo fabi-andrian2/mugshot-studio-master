@@ -34,6 +34,8 @@ const BoardMenu = ({
   onImage,
   onImageFiles,
   onRemoveImage,
+  imageAxes,
+  onImageFraming,
   onToggleGrid,
   onTitle,
   unit,
@@ -116,9 +118,11 @@ const BoardMenu = ({
               <SectionTitle>Image de fond</SectionTitle>
               <BackgroundImageField
                 image={image}
+                axes={imageAxes}
                 onImage={onImage}
                 onImageFiles={onImageFiles}
                 onRemove={onRemoveImage}
+                onFraming={onImageFraming}
                 onDone={() => setOpen(false)}
               />
             </div>

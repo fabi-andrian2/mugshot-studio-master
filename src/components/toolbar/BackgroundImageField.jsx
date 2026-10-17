@@ -1,5 +1,6 @@
-import { Image as ImageIcon, X } from 'lucide-react';
+import { Image as ImageIcon, RotateCcw, X } from 'lucide-react';
 import useFileDropZone from '../../hooks/useFileDropZone.js';
+import { DEFAULT_FRAMING, FRAMING_LIMITS, isDefaultFraming, normalizeFraming } from '../../domain/board.js';
 
 const ZONE_STYLES = {
   idle: 'border-gray-700 text-gray-500',
@@ -13,7 +14,29 @@ const ZONE_LABELS = {
   reject: 'Fichier non pris en charge : image uniquement',
 };
 
-const BackgroundImageField = ({ image, onImage, onImageFiles, onRemove, onDone }) => {
+const AXIS_LOCKED_HINT = "L'image remplit déjà la planche sur cet axe : augmente le zoom pour la déplacer.";
+
+const FramingSlider = ({ label, value, min, max, step, display, disabled = false, hint, onChange }) => (
+  <label className="block space-y-1" title={disabled ? hint : undefined}>
+    <span className="flex items-center justify-between text-[11px] text-gray-400">
+      <span>{label}</span>
+      <span className="font-mono text-[10px] text-gray-500">{disabled ? 'Fixe' : display}</span>
+    </span>
+    <input
+      type="range"
+      aria-label={label}
+      min={min}
+      max={max}
+      step={step}
+      value={value}
+      disabled={disabled}
+      onChange={(e) => onChange(parseFloat(e.target.value))}
+      className="w-full h-1 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-emerald-500 disabled:opacity-30 disabled:cursor-not-allowed"
+    />
+  </label>
+);
+
+const BackgroundImageField = ({ image, axes, onImage, onImageFiles, onRemove, onFraming, onDone }) => {
   const { dropState, dropProps } = useFileDropZone({
     onFiles: (files) => {
       onDone();
@@ -21,6 +44,7 @@ const BackgroundImageField = ({ image, onImage, onImageFiles, onRemove, onDone }
     },
   });
   const zone = dropState ?? 'idle';
+  const framing = normalizeFraming(image?.framing);
 
   return (
     <div className="space-y-2" {...dropProps}>
@@ -58,6 +82,50 @@ const BackgroundImageField = ({ image, onImage, onImageFiles, onRemove, onDone }
           <X size={12} /> Retirer
         </button>
       </div>
+      {image && (
+        <div className="space-y-2 pt-1">
+          <FramingSlider
+            label="Zoom"
+            value={framing.zoom}
+            min={FRAMING_LIMITS.minZoom}
+            max={FRAMING_LIMITS.maxZoom}
+            step="0.05"
+            display={`${Math.round(framing.zoom * 100)} %`}
+            onChange={(zoom) => onFraming({ zoom })}
+          />
+          <FramingSlider
+            label="Horizontal"
+            value={framing.x}
+            min={FRAMING_LIMITS.minPosition}
+            max={FRAMING_LIMITS.maxPosition}
+            step="0.01"
+            display={`${Math.round(framing.x * 100)} %`}
+            disabled={!axes.horizontal}
+            hint={AXIS_LOCKED_HINT}
+            onChange={(x) => onFraming({ x })}
+          />
+          <FramingSlider
+            label="Vertical"
+            value={framing.y}
+            min={FRAMING_LIMITS.minPosition}
+            max={FRAMING_LIMITS.maxPosition}
+            step="0.01"
+            display={`${Math.round(framing.y * 100)} %`}
+            disabled={!axes.vertical}
+            hint={AXIS_LOCKED_HINT}
+            onChange={(y) => onFraming({ y })}
+          />
+          <button
+            type="button"
+            disabled={isDefaultFraming(framing)}
+            onClick={() => onFraming(DEFAULT_FRAMING)}
+            title="Revenir au zoom 100 % et à l'image centrée"
+            className="w-full flex items-center justify-center gap-1.5 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-md px-2.5 py-1.5 text-xs text-gray-300 transition disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            <RotateCcw size={12} /> Cadrage initial
+          </button>
+        </div>
+      )}
     </div>
   );
 };

@@ -3,7 +3,7 @@ import { getCoverRect } from '../../domain/board.js';
 const BackgroundLayer = ({ image, canvasW, canvasH }) => {
   if (!image) return null;
 
-  const rect = getCoverRect(image.width, image.height, canvasW, canvasH);
+  const rect = getCoverRect(image.width, image.height, canvasW, canvasH, image.framing);
 
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none">

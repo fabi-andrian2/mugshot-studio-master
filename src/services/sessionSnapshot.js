@@ -1,5 +1,5 @@
 import { CANVAS_LIMITS, MIN_HEIGHT_CM, MAX_HEIGHT_CM } from '../domain/constants.js';
-import { isValidColor, normalizeBoardTitle } from '../domain/board.js';
+import { isValidColor, normalizeBoardTitle, withFraming } from '../domain/board.js';
 import { SCHEMA_VERSION } from './persistence.js';
 
 export class SnapshotError extends Error {
@@ -214,12 +214,15 @@ export const serializeSession = async (state, { fetchBlob = defaultFetchBlob } =
         background: {
           color: background.color,
           image: background.image
-            ? {
-                blob: backgroundBlob,
-                width: background.image.width,
-                height: background.image.height,
-                fileName: background.image.fileName,
-              }
+            ? withFraming(
+                {
+                  blob: backgroundBlob,
+                  width: background.image.width,
+                  height: background.image.height,
+                  fileName: background.image.fileName,
+                },
+                background.image.framing,
+              )
             : null,
         },
       },
@@ -284,7 +287,10 @@ export const restoreSession = async (
 
     const image = board.background.image;
     const restoredImage = image
-      ? { url: makeUrl(image.blob), width: image.width, height: image.height, fileName: image.fileName }
+      ? withFraming(
+          { url: makeUrl(image.blob), width: image.width, height: image.height, fileName: image.fileName },
+          image.framing,
+        )
       : null;
 
     return {

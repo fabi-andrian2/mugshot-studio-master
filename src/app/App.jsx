@@ -40,7 +40,9 @@ import {
 import {
   DEFAULT_BOARD,
   isValidColor,
+  getFramingAxes,
   setBackgroundColor,
+  setBackgroundFraming,
   setBackgroundImage,
   toggleGrid,
   setBoardTitle,
@@ -673,6 +675,11 @@ const MugshotStudio = () => {
     handleBackgroundImage(file);
   };
 
+    const handleBackgroundFraming = (patch) =>
+    setBoard((current) => setBackgroundFraming(current, patch));
+
+  const backgroundAxes = getFramingAxes(board.background.image, canvasW, canvasH);
+
   const handleToggleGrid = () => setBoard((current) => toggleGrid(current));
 
   const handleBoardTitle = (title) => setBoard((current) => setBoardTitle(current, title));
@@ -785,6 +792,8 @@ const MugshotStudio = () => {
           onBackgroundImage={handleBackgroundImage}
           onBackgroundImageFiles={handleBackgroundFiles}
           onRemoveBackgroundImage={() => applyBackgroundImage(null)}
+          backgroundAxes={backgroundAxes}
+          onBackgroundFraming={handleBackgroundFraming}
           onToggleGrid={handleToggleGrid}
           onBoardTitle={handleBoardTitle}
           mannequin={mannequin}

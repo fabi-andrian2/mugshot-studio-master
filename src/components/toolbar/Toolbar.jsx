@@ -97,6 +97,8 @@ const Toolbar = ({
   onBackgroundImage,
   onBackgroundImageFiles,
   onRemoveBackgroundImage,
+  backgroundAxes,
+  onBackgroundFraming,
   onToggleGrid,
   onBoardTitle,
   mannequin,
@@ -207,6 +209,8 @@ const Toolbar = ({
         onImage={onBackgroundImage}
         onImageFiles={onBackgroundImageFiles}
         onRemoveImage={onRemoveBackgroundImage}
+        imageAxes={backgroundAxes}
+        onImageFraming={onBackgroundFraming}
         onToggleGrid={onToggleGrid}
         onTitle={onBoardTitle}
         unit={unit}
