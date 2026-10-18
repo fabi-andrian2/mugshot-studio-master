@@ -132,6 +132,7 @@ const NameField = ({ subject, onRename }) => {
 
 const Inspector = ({
   subject,
+  selectionCount = 0,
   unit,
   canvasW,
   onPreview,
@@ -155,9 +156,13 @@ const Inspector = ({
         </div>
         <div className="flex-1 flex flex-col items-center justify-center text-center px-6 gap-3 text-gray-500">
           <ImageIcon size={32} className="opacity-30" />
-          <p className="text-xs text-gray-400">Aucun sujet sélectionné</p>
+          <p className="text-xs text-gray-400">
+            {selectionCount > 1 ? `${selectionCount} sujets sélectionnés` : 'Aucun sujet sélectionné'}
+          </p>
           <p className="text-[11px] text-gray-500">
-            Clique sur un sujet du canvas ou de la liste pour afficher sa mesure, sa position et son apparence.
+            {selectionCount > 1
+              ? 'Fais glisser l\'un d\'eux pour les déplacer ensemble. Suppr les supprime. Clique dans le vide pour désélectionner.'
+              : 'Clique sur un sujet du canvas ou de la liste pour afficher sa mesure, sa position et son apparence. Ctrl ou Cmd + clic pour en sélectionner plusieurs.'}
           </p>
         </div>
       </>

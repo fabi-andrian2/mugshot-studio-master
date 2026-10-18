@@ -7,7 +7,7 @@ const HANDLES = [
   { type: 'top-right', left: '100%', cursor: 'nesw-resize' },
 ];
 
-const SelectionOverlay = ({ zoom, onResizeStart }) => {
+const SelectionOverlay = ({ zoom, onResizeStart, showHandles = true }) => {
   const handleSize = HANDLE_SCREEN_PX / zoom;
   const frame = FRAME_SCREEN_PX / zoom;
 
@@ -17,7 +17,7 @@ const SelectionOverlay = ({ zoom, onResizeStart }) => {
         className="absolute inset-0 pointer-events-none"
         style={{ border: `${frame}px solid #34d399` }}
       />
-      {HANDLES.map(handle => (
+      {showHandles && HANDLES.map(handle => (
         <div
           key={handle.type}
           onPointerDown={e => onResizeStart(e, handle.type)}

@@ -21,6 +21,22 @@ import {
 } from "../domain/annotations.js";
 import { clampScale } from "../domain/measurement.js";
 import { arrangeSubjects, layoutOnImport } from "../domain/layout.js";
+import {
+  EMPTY_SUBJECT_SELECTION,
+  selectSubject,
+  deselectSubject,
+  removeSubjectsById,
+  pruneSubjectSelection,
+  getSingleSelectedId,
+  getDragIds,
+  getSelectionCountLabel,
+} from "../domain/subjectSelection.js";
+import {
+  getPointerDelta,
+  captureDragOrigins,
+  resolveDragDelta,
+  translateSubjects,
+} from "../domain/subjectDrag.js";
 import { isSubjectVisible, updateSilhouette } from "../domain/appearance.js";
 import {
   createSubject,
@@ -136,11 +152,20 @@ const MugshotStudio = () => {
     canUndo,
     canRedo,
   } = useDocumentHistory(HISTORY_OPTIONS);
-  const [selectedId, setSelectedIdRaw] = useState(null);
+  const [rawSelectedIds, setRawSelectedIds] = useState(EMPTY_SUBJECT_SELECTION);
   const [selectedMeasureIds, setSelectedMeasureIds] = useState(EMPTY_MEASURE_SELECTION);
 
+  const selectedIds = useMemo(
+    () => pruneSubjectSelection(rawSelectedIds, subjects),
+    [rawSelectedIds, subjects],
+  );
+  const selectedId = getSingleSelectedId(selectedIds);
+
   const setSelectedId = useCallback((value) => {
-    setSelectedIdRaw(value);
+    setRawSelectedIds((current) => {
+      const next = typeof value === "function" ? value(getSingleSelectedId(current)) : value;
+      return next === null ? EMPTY_SUBJECT_SELECTION : selectSubject(current, next);
+    });
     if (typeof value !== "function" && value !== null) {
       setSelectedMeasureIds((current) => clearMeasureSelection(current));
     }
@@ -333,13 +358,21 @@ const MugshotStudio = () => {
   const removeSubject = useCallback(
     (id) => {
       apply((list) => list.filter((s) => s.id !== id));
-      setSelectedId((current) => (current === id ? null : current));
+      setRawSelectedIds((current) => deselectSubject(current, id));
     },
-    [apply, setSelectedId],
+    [apply],
+  );
+
+  const removeSelectedSubjects = useCallback(
+    (ids) => {
+      apply((list) => removeSubjectsById(list, ids));
+      setRawSelectedIds(EMPTY_SUBJECT_SELECTION);
+    },
+    [apply],
   );
 
   const handleSelectMeasure = useCallback((id, additive) => {
-    setSelectedIdRaw(null);
+    setRawSelectedIds(EMPTY_SUBJECT_SELECTION);
     setSelectedMeasureIds((current) => selectMeasure(current, id, additive));
   }, []);
 
@@ -384,15 +417,19 @@ const MugshotStudio = () => {
   const handleSubjectPointerDown = (e, id) => {
     if (e.button !== 0 || isSpacePressed) return;
     e.stopPropagation();
+    if (e.ctrlKey || e.metaKey) {
+      setRawSelectedIds(selectSubject(selectedIds, id, true));
+      setSelectedMeasureIds((current) => clearMeasureSelection(current));
+      return;
+    }
     e.currentTarget.setPointerCapture(e.pointerId);
-    setSelectedId(id);
-    const s = subjects.find((s) => s.id === id);
+    const dragIds = getDragIds(selectedIds, id);
+    if (dragIds.length === 1) setSelectedId(id);
     setDragInfo({
       id,
       startX: e.clientX,
       startY: e.clientY,
-      initX: s.x,
-      initY: s.y,
+      origins: captureDragOrigins(subjects, dragIds),
     });
   };
 
@@ -427,15 +464,17 @@ const MugshotStudio = () => {
   const onDragMove = useCallback(
     (e) => {
       if (dragInfo) {
-        let nx = dragInfo.initX + (e.clientX - dragInfo.startX) / zoom;
-        let ny = dragInfo.initY - (e.clientY - dragInfo.startY) / zoom;
-
-        const snap = Math.abs(ny) < SNAP_Y;
-        setIsSnapping(snap);
-        if (snap) ny = 0;
-
-        nx = Math.max(-canvasW, Math.min(nx, canvasW * 2));
-        updateSubject(dragInfo.id, { x: nx, y: ny });
+        const delta = getPointerDelta(
+          { x: dragInfo.startX, y: dragInfo.startY },
+          { x: e.clientX, y: e.clientY },
+          zoom,
+        );
+        const resolved = resolveDragDelta(dragInfo.origins, dragInfo.id, delta, {
+          canvasW,
+          snapY: SNAP_Y,
+        });
+        setIsSnapping(resolved.snapped);
+        setLive((list) => translateSubjects(list, dragInfo.origins, resolved));
       } else if (resizeInfo) {
         const s = subjects.find((x) => x.id === resizeInfo.id);
         if (!s) return;
@@ -468,6 +507,7 @@ const MugshotStudio = () => {
       floorY,
       subjects,
       updateSubject,
+      setLive,
     ],
   );
 
@@ -479,15 +519,25 @@ const MugshotStudio = () => {
     commit();
   }, [commit]);
 
+  const cancelGesture = useCallback(() => {
+    setDragInfo(null);
+    setResizeInfo(null);
+    setAnchorInfo(null);
+    setIsSnapping(false);
+    rollback();
+  }, [rollback]);
+
   useEffect(() => {
     if (!dragInfo && !resizeInfo && !anchorInfo) return;
     window.addEventListener("pointermove", onDragMove);
     window.addEventListener("pointerup", onDragUp);
+    window.addEventListener("pointercancel", cancelGesture);
     return () => {
       window.removeEventListener("pointermove", onDragMove);
       window.removeEventListener("pointerup", onDragUp);
+      window.removeEventListener("pointercancel", cancelGesture);
     };
-  }, [dragInfo, resizeInfo, anchorInfo, onDragMove, onDragUp]);
+  }, [dragInfo, resizeInfo, anchorInfo, onDragMove, onDragUp, cancelGesture]);
 
   useEffect(() => {
     const onKey = (e) => {
@@ -499,6 +549,12 @@ const MugshotStudio = () => {
         e.preventDefault();
         if (key === "y" || e.shiftKey) handleRedo();
         else handleUndo();
+        return;
+      }
+
+      if (e.key === "Escape" && gestureActive) {
+        e.preventDefault();
+        cancelGesture();
         return;
       }
 
@@ -517,6 +573,13 @@ const MugshotStudio = () => {
           e.preventDefault();
           return;
         }
+      }
+
+      if (selectedIds.length > 1 && (e.key === "Delete" || e.key === "Backspace")) {
+        if (gestureActive || isTextField(e.target)) return;
+        removeSelectedSubjects(selectedIds);
+        e.preventDefault();
+        return;
       }
 
       if (selectedId && (e.key === "[" || e.key === "]")) {
@@ -570,6 +633,9 @@ const MugshotStudio = () => {
     showSettings,
     presentation,
     selectedId,
+    selectedIds,
+    gestureActive,
+    cancelGesture,
     measure.active,
     activeMeasureIds,
     deleteSelectedMeasures,
@@ -578,6 +644,7 @@ const MugshotStudio = () => {
     handleRedo,
     updateSubjectH,
     removeSubject,
+    removeSelectedSubjects,
   ]);
 
   const annotationItems = getAnnotationItems({
@@ -814,7 +881,7 @@ const MugshotStudio = () => {
           <aside className={`${presentation ? "hidden" : "flex"} w-56 bg-[#111] border-r border-gray-800 flex-col shrink-0`}>
             <LayersPanel
               subjects={subjects}
-              selectedId={selectedId}
+              selectedIds={selectedIds}
               onSelect={setSelectedId}
               onToggleVisible={handleToggleVisible}
               onMove={handleMove}
@@ -884,6 +951,7 @@ const MugshotStudio = () => {
                 floorY={floorY}
                 zoom={zoom}
                 selected={selectedId === s.id}
+                grouped={selectedIds.length > 1 && selectedIds.includes(s.id)}
                 showSnap={dragInfo?.id === s.id && isSnapping}
                 onPointerDown={(e) => handleSubjectPointerDown(e, s.id)}
                 onDoubleClick={(e) => handleSubjectDoubleClick(e, s.id)}
@@ -992,7 +1060,7 @@ const MugshotStudio = () => {
           floorY={floorY}
           subjectCount={subjects.length}
           hiddenCount={hiddenCount}
-          selectionLabel={getSelectionLabel(active, unit)}
+          selectionLabel={getSelectionCountLabel(selectedIds.length) || getSelectionLabel(active, unit)}
           measureActive={measure.active}
           canvasW={canvasW}
           canvasH={canvasH}
@@ -1003,6 +1071,7 @@ const MugshotStudio = () => {
       <aside className={`${presentation ? "hidden" : "flex"} w-64 xl:w-72 bg-[#111] border-l border-gray-800 flex-col shrink-0`}>
         <Inspector
           subject={active}
+          selectionCount={selectedIds.length}
           unit={unit}
           canvasW={canvasW}
           onPreview={(upd) => updateSubject(selectedId, upd)}

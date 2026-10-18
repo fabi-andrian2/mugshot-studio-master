@@ -40,6 +40,7 @@ const SubjectView = ({
   floorY,
   zoom,
   selected,
+  grouped,
   showSnap,
   onPointerDown,
   onDoubleClick,
@@ -104,6 +105,7 @@ const SubjectView = ({
         }}
       >
         {selected && <SelectionOverlay zoom={zoom} onResizeStart={onResizeStart} />}
+        {grouped && <SelectionOverlay zoom={zoom} showHandles={false} />}
       </div>
 
       {selected && (

@@ -133,7 +133,7 @@ export const LayersRail = ({ count, onExpand, hidden = false }) => (
   </button>
 );
 
-const LayersPanel = ({ subjects, selectedId, onSelect, onToggleVisible, onMove, onReorder, onRename, onRemove, onCollapse }) => {
+const LayersPanel = ({ subjects, selectedIds, onSelect, onToggleVisible, onMove, onReorder, onRename, onRemove, onCollapse }) => {
   const [menu, setMenu] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [dragId, setDragId] = useState(null);
@@ -217,7 +217,7 @@ const LayersPanel = ({ subjects, selectedId, onSelect, onToggleVisible, onMove, 
             <Layers size={11} /> Sujets ({subjects.length})
           </span>
         </h2>
-        {selectedId && (
+        {selectedIds.length > 0 && (
           <button
             type="button"
             onClick={() => onSelect(null)}
@@ -242,7 +242,7 @@ const LayersPanel = ({ subjects, selectedId, onSelect, onToggleVisible, onMove, 
             key={`${entry.id}:${entry.label}`}
             entry={entry}
             tag={entries.length > 1 ? (index === 0 ? 'Premier plan' : index === entries.length - 1 ? 'Arrière-plan' : '') : ''}
-            selected={selectedId === entry.id}
+            selected={selectedIds.includes(entry.id)}
             editing={editingId === entry.id}
             reorderable={reorderable}
             dragging={dragId === entry.id}
