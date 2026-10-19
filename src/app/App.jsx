@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { Upload, X } from "lucide-react";
+import { ImagePlus, Upload, X } from "lucide-react";
 
 import {
   DEFAULT_W,
@@ -114,6 +114,7 @@ import ViewportControls from "../components/viewport/ViewportControls.jsx";
 import { getInitialPanelLayout, toggleLayersPanel } from "../domain/panels.js";
 import FormatDialog from "../components/dialogs/FormatDialog.jsx";
 import StatusBar from "../components/status/StatusBar.jsx";
+import { getGridPalette, getGridTone } from "../domain/gridContrast.js";
 
 const HISTORY_OPTIONS = {
   isEqual: areDocumentStatesEqual,
@@ -655,6 +656,12 @@ const MugshotStudio = () => {
     unit,
   });
 
+  const hintOnPhoto = getGridTone(board.background) === "image";
+  const hintPalette = getGridPalette(board.background);
+  const hintColor = hintOnPhoto ? "#ffffff" : hintPalette.head;
+  const hintHalo = `color-mix(in srgb, ${hintOnPhoto ? "#000000" : hintPalette.halo} ${hintOnPhoto ? 85 : 95}%, transparent)`;
+  const hintShadow = `0 0 2px ${hintHalo}, 0 0 5px ${hintHalo}, 0 0 12px ${hintHalo}`;
+
   const mannequinGeometry = getMannequinGeometry(mannequin, { floorY, unit });
 
   const exportCanvas = async () => {
@@ -982,6 +989,31 @@ const MugshotStudio = () => {
               selectedIds={activeMeasureIds}
               onSelect={measure.active ? undefined : handleSelectMeasure}
             />
+            {subjects.length === 0 && !dropState && (
+              <div
+                className="absolute inset-0 flex items-center justify-center pointer-events-none"
+                style={{ paddingTop: canvasH * 0.25 }}
+              >
+                <div
+                  className="flex w-72 flex-col items-center gap-2 text-center"
+                  style={{
+                    transform: `scale(${1 / zoom})`,
+                    color: hintColor,
+                    textShadow: hintShadow,
+                  }}
+                >
+                  <ImagePlus size={24} strokeWidth={1.5} className="opacity-70" aria-hidden="true" />
+                  <p className="text-[15px] font-medium tracking-wide opacity-90">
+                    Commence par importer tes images
+                  </p>
+                  <p className={`text-xs leading-relaxed ${hintOnPhoto ? "opacity-95" : "opacity-70"}`}>
+                    Utilise Importer dans la barre d'outils
+                    <br />
+                    ou glisse-dépose tes fichiers ici.
+                  </p>
+                </div>
+              </div>
+            )}
             {measure.active && (
               <MeasureOverlay
                 zoom={zoom}
@@ -992,18 +1024,6 @@ const MugshotStudio = () => {
                 onDraft={setMeasureDraft}
                 onComplete={handleMeasureComplete}
               />
-            )}
-
-            {subjects.length === 0 && (
-              <div
-                className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none"
-                style={{ paddingTop: canvasH * 0.25 }}
-              >
-                <Upload size={64} className="text-gray-400 opacity-10 mb-3" />
-                <p className="text-gray-400 text-3xl font-semibold opacity-10 tracking-widest">
-                  GLISSE DES IMAGES ICI
-                </p>
-              </div>
             )}
           </div>
 
