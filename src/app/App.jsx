@@ -115,6 +115,7 @@ import { getInitialPanelLayout, toggleLayersPanel } from "../domain/panels.js";
 import FormatDialog from "../components/dialogs/FormatDialog.jsx";
 import StatusBar from "../components/status/StatusBar.jsx";
 import { getGridPalette, getGridTone } from "../domain/gridContrast.js";
+import { isForeignPointer } from "../domain/pointerGesture.js";
 
 const HISTORY_OPTIONS = {
   isEqual: areDocumentStatesEqual,
@@ -279,6 +280,7 @@ const MugshotStudio = () => {
   }, []);
 
   const gestureActive = !!dragInfo || !!resizeInfo || !!anchorInfo;
+  const gesturePointerId = (dragInfo ?? resizeInfo ?? anchorInfo)?.pointerId ?? null;
 
   const handleUndo = useCallback(() => {
     if (gestureActive) return;
@@ -416,7 +418,7 @@ const MugshotStudio = () => {
   );
 
   const handleSubjectPointerDown = (e, id) => {
-    if (e.button !== 0 || isSpacePressed) return;
+    if (e.button !== 0 || isSpacePressed || isForeignPointer(gesturePointerId, e.pointerId)) return;
     e.stopPropagation();
     if (e.ctrlKey || e.metaKey) {
       setRawSelectedIds(selectSubject(selectedIds, id, true));
@@ -428,6 +430,7 @@ const MugshotStudio = () => {
     if (dragIds.length === 1) setSelectedId(id);
     setDragInfo({
       id,
+      pointerId: e.pointerId,
       startX: e.clientX,
       startY: e.clientY,
       origins: captureDragOrigins(subjects, dragIds),
@@ -440,13 +443,14 @@ const MugshotStudio = () => {
   };
 
   const handleResizePointerDown = (e, id, handleType) => {
-    if (isSpacePressed) return;
+    if (isSpacePressed || isForeignPointer(gesturePointerId, e.pointerId)) return;
     e.stopPropagation();
     e.currentTarget.setPointerCapture(e.pointerId);
     const s = subjects.find((x) => x.id === id);
     const { visible, anchor } = getSubjectGeometry(s, floorY);
     setResizeInfo({
       id,
+      pointerId: e.pointerId,
       handleType,
       startX: e.clientX,
       startY: e.clientY,
@@ -455,15 +459,16 @@ const MugshotStudio = () => {
   };
 
   const handleAnchorPointerDown = (e, id, kind) => {
-    if (e.button !== 0 || isSpacePressed) return;
+    if (e.button !== 0 || isSpacePressed || isForeignPointer(gesturePointerId, e.pointerId)) return;
     e.stopPropagation();
     e.currentTarget.setPointerCapture(e.pointerId);
     setSelectedId(id);
-    setAnchorInfo({ id, kind });
+    setAnchorInfo({ id, kind, pointerId: e.pointerId });
   };
 
   const onDragMove = useCallback(
     (e) => {
+      if (isForeignPointer(gesturePointerId, e.pointerId)) return;
       if (dragInfo) {
         const delta = getPointerDelta(
           { x: dragInfo.startX, y: dragInfo.startY },
@@ -503,6 +508,7 @@ const MugshotStudio = () => {
       dragInfo,
       resizeInfo,
       anchorInfo,
+      gesturePointerId,
       zoom,
       canvasW,
       floorY,
@@ -512,13 +518,17 @@ const MugshotStudio = () => {
     ],
   );
 
-  const onDragUp = useCallback(() => {
-    setDragInfo(null);
-    setResizeInfo(null);
-    setAnchorInfo(null);
-    setIsSnapping(false);
-    commit();
-  }, [commit]);
+  const onDragUp = useCallback(
+    (e) => {
+      if (isForeignPointer(gesturePointerId, e.pointerId)) return;
+      setDragInfo(null);
+      setResizeInfo(null);
+      setAnchorInfo(null);
+      setIsSnapping(false);
+      commit();
+    },
+    [commit, gesturePointerId],
+  );
 
   const cancelGesture = useCallback(() => {
     setDragInfo(null);
@@ -528,17 +538,25 @@ const MugshotStudio = () => {
     rollback();
   }, [rollback]);
 
+  const onPointerCancel = useCallback(
+    (e) => {
+      if (isForeignPointer(gesturePointerId, e.pointerId)) return;
+      cancelGesture();
+    },
+    [cancelGesture, gesturePointerId],
+  );
+
   useEffect(() => {
     if (!dragInfo && !resizeInfo && !anchorInfo) return;
     window.addEventListener("pointermove", onDragMove);
     window.addEventListener("pointerup", onDragUp);
-    window.addEventListener("pointercancel", cancelGesture);
+    window.addEventListener("pointercancel", onPointerCancel);
     return () => {
       window.removeEventListener("pointermove", onDragMove);
       window.removeEventListener("pointerup", onDragUp);
-      window.removeEventListener("pointercancel", cancelGesture);
+      window.removeEventListener("pointercancel", onPointerCancel);
     };
-  }, [dragInfo, resizeInfo, anchorInfo, onDragMove, onDragUp, cancelGesture]);
+  }, [dragInfo, resizeInfo, anchorInfo, onDragMove, onDragUp, onPointerCancel]);
 
   useEffect(() => {
     const onKey = (e) => {
@@ -913,10 +931,11 @@ const MugshotStudio = () => {
               : isPanning
                 ? "grabbing"
                 : "default",
+            touchAction: "none",
           }}
           {...dropProps}
-          onMouseDown={(e) => {
-            if (e.button === 0) {
+          onPointerDown={(e) => {
+            if (e.button === 0 && !isForeignPointer(gesturePointerId, e.pointerId)) {
               if (
                 isSpacePressed ||
                 e.target === containerRef.current ||

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { DEFAULT_ZOOM } from '../domain/constants.js';
 import { clampZoom, getViewForRect } from '../domain/views.js';
+import { getPanView, isForeignPointer } from '../domain/pointerGesture.js';
 
 const BUTTON_ZOOM_FACTOR = 1.2;
 const WHEEL_ZOOM_FACTOR = 1.1;
@@ -70,7 +71,15 @@ const useCanvasNavigation = ({ containerRef, workspaceRef }) => {
 
   const startPan = useCallback((e) => {
     if (e.button !== 0) return;
-    setPanInfo({ startX: e.clientX, startY: e.clientY, initPanX: panX, initPanY: panY });
+    setPanInfo((current) =>
+      current ?? {
+        pointerId: e.pointerId,
+        startX: e.clientX,
+        startY: e.clientY,
+        initPanX: panX,
+        initPanY: panY,
+      },
+    );
   }, [panX, panY]);
 
   const onBackgroundDoubleClick = useCallback((e) => {
@@ -105,18 +114,20 @@ const useCanvasNavigation = ({ containerRef, workspaceRef }) => {
   useEffect(() => {
     if (!panInfo) return;
     const onMove = (e) => {
-      commitView({
-        zoom: viewRef.current.zoom,
-        panX: panInfo.initPanX + (e.clientX - panInfo.startX),
-        panY: panInfo.initPanY + (e.clientY - panInfo.startY),
-      });
+      if (isForeignPointer(panInfo.pointerId, e.pointerId)) return;
+      commitView(getPanView(panInfo, { x: e.clientX, y: e.clientY }, viewRef.current.zoom));
     };
-    const onUp = () => setPanInfo(null);
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
+    const onEnd = (e) => {
+      if (isForeignPointer(panInfo.pointerId, e.pointerId)) return;
+      setPanInfo(null);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onEnd);
+    window.addEventListener('pointercancel', onEnd);
     return () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onEnd);
+      window.removeEventListener('pointercancel', onEnd);
     };
   }, [panInfo, commitView]);
 
