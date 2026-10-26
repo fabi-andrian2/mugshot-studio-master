@@ -47,7 +47,7 @@ import {
   getSelectionLabel,
 } from "../domain/subjects.js";
 import { pickImageFile, getImportMessage } from "../domain/fileDrop.js";
-import { renderBoard, downloadCanvasAsPng } from "../services/export.js";
+import { renderBoard, saveCanvasAsPng } from "../services/export.js";
 import { importImageFiles } from "../services/imageImport.js";
 import {
   loadBackgroundImage,
@@ -695,7 +695,8 @@ const MugshotStudio = () => {
         canvasH,
         floorY,
       });
-      await downloadCanvasAsPng(canvas);
+      const result = await saveCanvasAsPng(canvas);
+      if (result.status === "saved") window.alert(`Planche enregistrée : ${result.path}`);
     } catch (err) {
       console.error(err);
       window.alert(`Export impossible : ${err.message}`);

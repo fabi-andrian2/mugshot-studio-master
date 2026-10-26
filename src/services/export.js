@@ -5,8 +5,7 @@ import { getSilhouetteStyle } from '../domain/appearance.js';
 import { DEFAULT_BACKGROUND, getCoverRect } from '../domain/board.js';
 import { getExportSize, getExportLayers } from '../domain/exportPlan.js';
 import loadImage from './loadImage.js';
-
-const DOWNLOAD_URL_LIFETIME_MS = 10000;
+import { savePngBlob } from './saveFile.js';
 
 export const drawBackground = async (ctx, background, canvasW, canvasH, load = loadImage) => {
   ctx.fillStyle = background.color;
@@ -199,12 +198,4 @@ const canvasToBlob = (canvas) =>
     }, 'image/png');
   });
 
-export const downloadCanvasAsPng = async (canvas) => {
-  const blob = await canvasToBlob(canvas);
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.download = `Mugshot_Studio_${Date.now()}.png`;
-  link.href = url;
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(url), DOWNLOAD_URL_LIFETIME_MS);
-};
+export const saveCanvasAsPng = async (canvas, options) => savePngBlob(await canvasToBlob(canvas), options);
