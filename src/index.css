@@ -1,0 +1,31 @@
+@import "tailwindcss";
+@source "../index.html";
+@source "./";
+
+@theme {
+  --font-sans: "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "Cascadia Mono", ui-monospace, "SF Mono", Consolas, Menlo, "Liberation Mono", monospace;
+  --animate-fade-in: fade-in 140ms ease-out;
+  --animate-pop-in: pop-in 140ms ease-out;
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes pop-in {
+    from { opacity: 0; transform: scale(0.97); }
+    to { opacity: 1; transform: none; }
+  }
+}
+@layer base {
+  :where(button, select, summary, input[type="range"], input[type="color"], input[type="checkbox"]):focus-visible {
+    outline: 2px solid rgb(52 211 153 / 0.8);
+    outline-offset: 1px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

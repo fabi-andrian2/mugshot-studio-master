@@ -28,9 +28,10 @@ test('les textes du canvas et de l export partagent la même pile que l interfac
   assert.equal(geometry.labelFontFamily, CANVAS_FONT_FAMILY);
 });
 
-test('index.html déclare les mêmes piles que le module typography', () => {
+test('index.css déclare les mêmes piles que le module typography', () => {
+  const css = readFileSync(new URL('../src/index.css', import.meta.url), 'utf8');
   const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-  assert.ok(html.includes(`--font-sans: ${UI_FONT_FAMILY};`));
-  assert.ok(html.includes(`--font-mono: ${NUMERIC_FONT_FAMILY};`));
+  assert.ok(css.includes(`--font-sans: ${UI_FONT_FAMILY};`));
+  assert.ok(css.includes(`--font-mono: ${NUMERIC_FONT_FAMILY};`));
   assert.ok(html.includes('lang="fr"'));
 });
