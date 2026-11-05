@@ -1,5 +1,6 @@
 import { FALLBACK_NATURAL_W, FALLBACK_NATURAL_H, MIN_ANCHOR_SPAN } from './constants.js';
 import { heightCmFromScale, scaleFromHeightCm, clampScale } from './measurement.js';
+import { buildSubjectTransform, getBoundsOfPoints, getRotation, rotatePoint } from './rotation.js';
 
 const FULL_BOUNDS = { left: 0, top: 0, right: 1, bottom: 1 };
 
@@ -85,12 +86,35 @@ export const getSubjectGeometry = (subject, floorY) => {
     return subject.flipX ? 2 * subject.x - raw : raw;
   };
 
+  const anchor = { x: toCanvasX(ground.x), y: anchorY };
+  const localHead = { x: toCanvasX(head.x), y: boxTop + head.y * natural.height * scale };
+  const rotation = getRotation(subject);
+  const transformSteps = buildSubjectTransform({
+    pivot: anchor,
+    flipAxisX: subject.x,
+    flipped: Boolean(subject.flipX),
+    rotation,
+  });
+
+  const localCorners = [
+    { x: visible.left, y: visible.top },
+    { x: visible.left + visible.width, y: visible.top },
+    { x: visible.left + visible.width, y: visible.top + visible.height },
+    { x: visible.left, y: visible.top + visible.height },
+  ];
+  const corners = localCorners.map((corner) => rotatePoint(corner, anchor, rotation));
+
   return {
     box,
     visible,
     originX,
-    anchor: { x: toCanvasX(ground.x), y: anchorY },
-    head: { x: toCanvasX(head.x), y: boxTop + head.y * natural.height * scale },
+    anchor,
+    head: rotatePoint(localHead, anchor, rotation),
+    localHead,
+    rotation,
+    transformSteps,
+    corners,
+    projectedBounds: getBoundsOfPoints(corners),
   };
 };
 

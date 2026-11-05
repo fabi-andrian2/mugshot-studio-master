@@ -15,6 +15,7 @@ const makeSubject = (id, overrides = {}) => ({
   y: 0,
   scale: 1.2,
   flipX: true,
+  rotation: 0,
   zIndex: 2,
   placement: 'manual',
   visible: false,

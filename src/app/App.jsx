@@ -116,6 +116,7 @@ import FormatDialog from "../components/dialogs/FormatDialog.jsx";
 import StatusBar from "../components/status/StatusBar.jsx";
 import { getGridPalette, getGridTone } from "../domain/gridContrast.js";
 import { isForeignPointer } from "../domain/pointerGesture.js";
+import { isRotated } from "../domain/rotation.js";
 
 const HISTORY_OPTIONS = {
   isEqual: areDocumentStatesEqual,
@@ -447,6 +448,7 @@ const MugshotStudio = () => {
     e.stopPropagation();
     e.currentTarget.setPointerCapture(e.pointerId);
     const s = subjects.find((x) => x.id === id);
+    if (isRotated(s)) return;
     const { visible, anchor } = getSubjectGeometry(s, floorY);
     setResizeInfo({
       id,
@@ -460,6 +462,7 @@ const MugshotStudio = () => {
 
   const handleAnchorPointerDown = (e, id, kind) => {
     if (e.button !== 0 || isSpacePressed || isForeignPointer(gesturePointerId, e.pointerId)) return;
+    if (isRotated(subjects.find((x) => x.id === id))) return;
     e.stopPropagation();
     e.currentTarget.setPointerCapture(e.pointerId);
     setSelectedId(id);
@@ -1115,7 +1118,7 @@ const MugshotStudio = () => {
           unit={unit}
           canvasW={canvasW}
           onPreview={(upd) => updateSubject(selectedId, upd)}
-          onApply={(upd) => updateSubjectH(selectedId, upd)}
+          onApply={(upd, mergeKey) => updateSubjectH(selectedId, upd, mergeKey)}
           onCancelEdit={rollback}
           onEndGesture={commit}
           onRename={(name) => handleRename(selectedId, name)}

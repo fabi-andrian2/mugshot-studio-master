@@ -13,14 +13,16 @@ const AnnotationsLayer = ({ items, canvasW, canvasH }) => {
     >
       {items.map(item => (
         <g key={item.id}>
-          <line
-            x1={item.lineX1}
-            y1={item.lineY}
-            x2={item.lineX2}
-            y2={item.lineY}
-            stroke={item.emphasized ? ANNOTATION_STYLE.accentColor : ANNOTATION_STYLE.lineColor}
-            strokeWidth={ANNOTATION_STYLE.lineWidth}
-          />
+          {item.showLine && (
+            <line
+              x1={item.lineX1}
+              y1={item.lineY}
+              x2={item.lineX2}
+              y2={item.lineY}
+              stroke={item.emphasized ? ANNOTATION_STYLE.accentColor : ANNOTATION_STYLE.lineColor}
+              strokeWidth={ANNOTATION_STYLE.lineWidth}
+            />
+          )}
           <text
             x={item.labelX}
             y={item.labelY}

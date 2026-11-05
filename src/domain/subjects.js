@@ -25,6 +25,7 @@ export const createSubject = (image, { index, canvasW, zIndex }) => {
     y: 0,
     scale: 1,
     flipX: false,
+    rotation: 0,
     zIndex,
     placement: 'auto',
     visible: true,

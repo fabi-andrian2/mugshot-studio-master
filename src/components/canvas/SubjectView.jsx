@@ -1,5 +1,6 @@
 import { getSubjectGeometry } from '../../domain/geometry.js';
 import { getSilhouetteStyle, isSubjectVisible } from '../../domain/appearance.js';
+import { stepsToCssTransform } from '../../domain/rotation.js';
 import SelectionOverlay from './SelectionOverlay.jsx';
 
 const MARKER_SCREEN_PX = 30;
@@ -9,15 +10,17 @@ const MARKER_TITLES = {
   head: 'Repère de tête : glisser pour le placer sur le sommet réel du crâne',
 };
 
-const AnchorMarker = ({ kind, point, zoom, onPointerDown }) => {
+const LOCKED_TITLE = 'Déplacement des repères indisponible tant que l\'angle n\'est pas 0°';
+
+const AnchorMarker = ({ kind, point, zoom, onPointerDown, locked }) => {
   const size = MARKER_SCREEN_PX / zoom;
   const color = MARKER_COLORS[kind];
 
   return (
     <div
-      onPointerDown={onPointerDown}
-      title={MARKER_TITLES[kind]}
-      className="absolute cursor-move"
+      onPointerDown={locked ? undefined : onPointerDown}
+      title={locked ? LOCKED_TITLE : MARKER_TITLES[kind]}
+      className={locked ? 'absolute pointer-events-none' : 'absolute cursor-move'}
       style={{
         left: point.x - size / 2,
         top: point.y - size / 2,
@@ -49,7 +52,8 @@ const SubjectView = ({
 }) => {
   if (!isSubjectVisible(subject)) return null;
 
-  const { box, visible, originX, anchor, head } = getSubjectGeometry(subject, floorY);
+  const { box, visible, originX, anchor, head, rotation, transformSteps } = getSubjectGeometry(subject, floorY);
+  const rotated = rotation !== 0;
   const silhouette = getSilhouetteStyle(subject);
 
   return (
@@ -61,8 +65,8 @@ const SubjectView = ({
           top: box.top,
           width: box.width,
           height: box.height,
-          transform: subject.flipX ? 'scaleX(-1)' : undefined,
-          transformOrigin: `${originX}px 0px`,
+          transform: rotated ? stepsToCssTransform(transformSteps, box) : subject.flipX ? 'scaleX(-1)' : undefined,
+          transformOrigin: rotated ? '0 0' : `${originX}px 0px`,
           zIndex: subject.zIndex,
         }}
       >
@@ -101,17 +105,19 @@ const SubjectView = ({
           top: visible.top,
           width: visible.width,
           height: visible.height,
+          transform: rotated ? stepsToCssTransform(transformSteps, visible) : undefined,
+          transformOrigin: rotated ? '0 0' : undefined,
           zIndex: subject.zIndex,
         }}
       >
-        {selected && <SelectionOverlay zoom={zoom} onResizeStart={onResizeStart} />}
+        {selected && <SelectionOverlay zoom={zoom} onResizeStart={onResizeStart} showHandles={!rotated} />}
         {grouped && <SelectionOverlay zoom={zoom} showHandles={false} />}
       </div>
 
       {selected && (
         <>
-          <AnchorMarker kind="head" point={head} zoom={zoom} onPointerDown={e => onAnchorStart(e, 'head')} />
-          <AnchorMarker kind="ground" point={anchor} zoom={zoom} onPointerDown={e => onAnchorStart(e, 'ground')} />
+          <AnchorMarker kind="head" point={head} zoom={zoom} locked={rotated} onPointerDown={e => onAnchorStart(e, 'head')} />
+          <AnchorMarker kind="ground" point={anchor} zoom={zoom} locked={rotated} onPointerDown={e => onAnchorStart(e, 'ground')} />
         </>
       )}
 

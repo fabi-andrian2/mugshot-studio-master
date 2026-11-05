@@ -14,6 +14,7 @@ import {
   MIN_SILHOUETTE_OPACITY,
 } from '../../domain/appearance.js';
 import { DEFAULT_SECTIONS, toggleSection } from '../../domain/panels.js';
+import { getRotation, normalizeAngle } from '../../domain/rotation.js';
 
 const SHORTCUTS = [
   ['↑ ↓ ← →', 'déplacer ±2 px'],
@@ -300,7 +301,7 @@ const Inspector = ({
           title="Position"
           open={sections.position}
           onToggle={() => toggle('position')}
-          summary={`X ${Math.round(subject.x)} · Y ${Math.round(subject.y)}`}
+          summary={`X ${Math.round(subject.x)} · Y ${Math.round(subject.y)}${getRotation(subject) !== 0 ? ` · ${getRotation(subject)}°` : ''}`}
         >
           <div className="grid grid-cols-2 gap-2">
             <NumField
@@ -327,6 +328,28 @@ const Inspector = ({
           <p className="text-[11px] text-gray-500 leading-snug">
             Y : hauteur de l'appui au-dessus du sol (0 = posé au sol).
           </p>
+          <NumField
+            label="Rotation · autour de l'appui"
+            value={getRotation(subject)}
+            step={1}
+            decimals={1}
+            unit="°"
+            onChange={v => onPreview({ rotation: normalizeAngle(v) })}
+            onCommit={v => onApply({ rotation: normalizeAngle(v) }, 'rotation')}
+            onCancel={onCancelEdit}
+          />
+          <p className="text-[11px] text-gray-500 leading-snug">
+            Angle positif : sens horaire. La hauteur réelle ne change pas.
+            {getRotation(subject) !== 0 && ' Redimensionnement à la souris et repères verrouillés tant que l\'angle n\'est pas 0°.'}
+          </p>
+          <button
+            type="button"
+            disabled={getRotation(subject) === 0}
+            onClick={() => onApply({ rotation: 0 })}
+            className="w-full bg-gray-800 hover:bg-gray-700 disabled:opacity-40 disabled:hover:bg-gray-800 border border-gray-700 text-xs py-1.5 rounded-md text-gray-300 transition"
+          >
+            Réinitialiser la rotation
+          </button>
           <button
             type="button"
             onClick={() => onApply({ y: 0 })}

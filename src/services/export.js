@@ -2,6 +2,7 @@ import { getSubjectGeometry } from '../domain/geometry.js';
 import { ANNOTATION_STYLE } from '../domain/annotations.js';
 import { MEASURE_STYLE } from '../domain/measure.js';
 import { getSilhouetteStyle } from '../domain/appearance.js';
+import { applyStepsToContext } from '../domain/rotation.js';
 import { DEFAULT_BACKGROUND, getCoverRect } from '../domain/board.js';
 import { getExportSize, getExportLayers } from '../domain/exportPlan.js';
 import loadImage from './loadImage.js';
@@ -60,15 +61,14 @@ const drawSubject = async (ctx, subject, floorY) => {
     throw new Error(`Image du sujet illisible (${subject.name}).`, { cause: error });
   }
 
-  const { box, originX } = getSubjectGeometry(subject, floorY);
+  const { box, transformSteps } = getSubjectGeometry(subject, floorY);
   const silhouette = getSilhouetteStyle(subject);
   const source = subject.silhouette ? toSilhouette(img, silhouette.color) : img;
 
   ctx.save();
   if (subject.silhouette) ctx.globalAlpha = silhouette.opacity;
-  ctx.translate(box.left + originX, box.top);
-  if (subject.flipX) ctx.scale(-1, 1);
-  ctx.drawImage(source, -originX, 0, box.width, box.height);
+  applyStepsToContext(ctx, transformSteps);
+  ctx.drawImage(source, box.left, box.top, box.width, box.height);
   ctx.restore();
 
   if (subject.silhouette) {
@@ -101,10 +101,12 @@ const drawAnnotations = (ctx, items) => {
 
     ctx.strokeStyle = item.emphasized ? ANNOTATION_STYLE.accentColor : ANNOTATION_STYLE.lineColor;
     ctx.lineWidth = ANNOTATION_STYLE.lineWidth;
-    ctx.beginPath();
-    ctx.moveTo(item.lineX1, item.lineY);
-    ctx.lineTo(item.lineX2, item.lineY);
-    ctx.stroke();
+    if (item.showLine) {
+      ctx.beginPath();
+      ctx.moveTo(item.lineX1, item.lineY);
+      ctx.lineTo(item.lineX2, item.lineY);
+      ctx.stroke();
+    }
 
     ctx.font = `bold ${ANNOTATION_STYLE.fontSize}px ${ANNOTATION_STYLE.fontFamily}`;
     ctx.textAlign = 'center';

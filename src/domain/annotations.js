@@ -27,14 +27,16 @@ export const getAnnotationItems = ({ subjects, selectedId, annotations, floorY, 
     : shown.filter((subject) => subject.id === selectedId);
 
   return targets.map((subject) => {
-    const { visible, head } = getSubjectGeometry(subject, floorY);
+    const { visible, head, rotation } = getSubjectGeometry(subject, floorY);
+    const rotated = rotation !== 0;
     return {
       id: subject.id,
       text: `${subject.name.toUpperCase()} · ${formatHeight(getSubjectHeightCm(subject), unit)}`,
+      showLine: !rotated,
       lineY: head.y,
       lineX1: visible.left - ANNOTATION_STYLE.linePadding,
       lineX2: visible.left + visible.width + ANNOTATION_STYLE.linePadding,
-      labelX: subject.x,
+      labelX: rotated ? head.x : subject.x,
       labelY: Math.max(ANNOTATION_STYLE.fontSize + 8, head.y - ANNOTATION_STYLE.labelGap),
       emphasized: subject.id === selectedId,
     };

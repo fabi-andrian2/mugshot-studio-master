@@ -1,4 +1,5 @@
 import { CANVAS_LIMITS, MIN_HEIGHT_CM, MAX_HEIGHT_CM } from '../domain/constants.js';
+import { normalizeAngle } from '../domain/rotation.js';
 import { isValidColor, normalizeBoardTitle, withFraming } from '../domain/board.js';
 import { SCHEMA_VERSION } from './persistence.js';
 
@@ -173,6 +174,7 @@ const copySubjectFields = (subject, blob) => ({
   y: subject.y,
   scale: subject.scale,
   flipX: subject.flipX,
+  ...(normalizeAngle(subject.rotation) !== 0 && { rotation: normalizeAngle(subject.rotation) }),
   zIndex: subject.zIndex,
   placement: subject.placement,
   visible: subject.visible !== false,
@@ -279,6 +281,7 @@ export const restoreSession = async (
 
     const restoredSubjects = subjects.map(({ blob, ...subject }) => ({
       ...subject,
+      rotation: normalizeAngle(subject.rotation),
       visibleBounds: pickBounds(subject.visibleBounds),
       groundAnchor: pickPoint(subject.groundAnchor),
       headAnchor: pickPoint(subject.headAnchor),
