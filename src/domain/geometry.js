@@ -1,6 +1,14 @@
 import { FALLBACK_NATURAL_W, FALLBACK_NATURAL_H, MIN_ANCHOR_SPAN } from './constants.js';
 import { heightCmFromScale, scaleFromHeightCm, clampScale } from './measurement.js';
-import { buildSubjectTransform, getBoundsOfPoints, getRotation, rotatePoint } from './rotation.js';
+import {
+  applyStepsToPoint,
+  buildSubjectTransform,
+  getBoundsOfPoints,
+  getRotation,
+  isRotated,
+  rotatePoint,
+  unrotatePoint,
+} from './rotation.js';
 
 const FULL_BOUNDS = { left: 0, top: 0, right: 1, bottom: 1 };
 
@@ -119,21 +127,36 @@ export const getSubjectGeometry = (subject, floorY) => {
 };
 
 const pointToImage = (subject, floorY, point) => {
-  const { box } = getSubjectGeometry(subject, floorY);
-  const unflippedX = subject.flipX ? 2 * subject.x - point.x : point.x;
+  const { box, anchor, rotation } = getSubjectGeometry(subject, floorY);
+  const local = unrotatePoint(point, anchor, rotation);
+  const unflippedX = subject.flipX ? 2 * subject.x - local.x : local.x;
   return {
     box,
     x: clamp((unflippedX - box.left) / box.width, 0, 1),
-    y: (point.y - box.top) / box.height,
+    y: (local.y - box.top) / box.height,
   };
+};
+
+const getSpriteOrigin = (subject, floorY) => {
+  const { box, transformSteps } = getSubjectGeometry(subject, floorY);
+  return applyStepsToPoint(transformSteps, { x: box.left, y: box.top });
 };
 
 export const getAnchorUpdateForCanvasPoint = (subject, floorY, point) => {
   const { box, x, y: rawY } = pointToImage(subject, floorY, point);
   const y = clamp(rawY, Math.min(getHeadAnchor(subject).y + MIN_ANCHOR_SPAN, 1), 1);
-  return {
+  const update = {
     groundAnchor: { x, y },
     y: floorY - (box.top + y * box.height),
+  };
+  if (!isRotated(subject)) return update;
+
+  const before = getSpriteOrigin(subject, floorY);
+  const after = getSpriteOrigin({ ...subject, ...update }, floorY);
+  return {
+    ...update,
+    x: subject.x + (before.x - after.x),
+    y: update.y - (before.y - after.y),
   };
 };
 
@@ -141,4 +164,18 @@ export const getHeadUpdateForCanvasPoint = (subject, floorY, point) => {
   const { x, y: rawY } = pointToImage(subject, floorY, point);
   const y = clamp(rawY, 0, Math.max(0, getGroundAnchor(subject).y - MIN_ANCHOR_SPAN));
   return { headAnchor: { x, y } };
+};
+
+export const keepPivotOnScaleChange = (subject, update) => {
+  if (update.scale === undefined || update.x !== undefined || !isRotated(subject)) return update;
+  const bounds = getVisibleBounds(subject);
+  const natural = getNaturalSize(subject);
+  const offset = (getGroundAnchor(subject).x - (bounds.left + bounds.right) / 2) * natural.width;
+  const side = subject.flipX ? -1 : 1;
+  return { ...update, x: subject.x + side * offset * (subject.scale - update.scale) };
+};
+
+export const getSubjectFootprint = (subject, floorY) => {
+  const { visible, projectedBounds } = getSubjectGeometry(subject, floorY);
+  return isRotated(subject) ? projectedBounds : visible;
 };

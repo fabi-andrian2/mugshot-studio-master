@@ -1,0 +1,123 @@
+diff --git a/src/domain/annotations.js b/src/domain/annotations.js
+index 615b91e..8806978 100644
+--- a/src/domain/annotations.js
++++ b/src/domain/annotations.js
+@@ -27,15 +27,21 @@ export const getAnnotationItems = ({ subjects, selectedId, annotations, floorY,
+     : shown.filter((subject) => subject.id === selectedId);
+ 
+   return targets.map((subject) => {
+-    const { visible, head, rotation } = getSubjectGeometry(subject, floorY);
++    const { visible, head, rotation, projectedBounds } = getSubjectGeometry(subject, floorY);
+     const rotated = rotation !== 0;
++    const span = rotated
++      ? {
++          left: Math.min(projectedBounds.left, head.x),
++          right: Math.max(projectedBounds.left + projectedBounds.width, head.x),
++        }
++      : { left: visible.left, right: visible.left + visible.width };
+     return {
+       id: subject.id,
+       text: `${subject.name.toUpperCase()} · ${formatHeight(getSubjectHeightCm(subject), unit)}`,
+-      showLine: !rotated,
++      showLine: true,
+       lineY: head.y,
+-      lineX1: visible.left - ANNOTATION_STYLE.linePadding,
+-      lineX2: visible.left + visible.width + ANNOTATION_STYLE.linePadding,
++      lineX1: span.left - ANNOTATION_STYLE.linePadding,
++      lineX2: span.right + ANNOTATION_STYLE.linePadding,
+       labelX: rotated ? head.x : subject.x,
+       labelY: Math.max(ANNOTATION_STYLE.fontSize + 8, head.y - ANNOTATION_STYLE.labelGap),
+       emphasized: subject.id === selectedId,
+diff --git a/tests/rotation.test.js b/tests/rotation.test.js
+index 84dedb0..50f06ac 100644
+--- a/tests/rotation.test.js
++++ b/tests/rotation.test.js
+@@ -13,7 +13,7 @@ import {
+   unrotatePoint,
+ } from '../src/domain/rotation.js';
+ import { getSubjectGeometry, getSubjectHeightCm, getHeadAnchor, getGroundAnchor } from '../src/domain/geometry.js';
+-import { getAnnotationItems } from '../src/domain/annotations.js';
++import { ANNOTATION_STYLE, getAnnotationItems } from '../src/domain/annotations.js';
+ import { createHistoryState, historyReducer } from '../src/hooks/useHistory.js';
+ import { areSubjectListsEqual, createSubject } from '../src/domain/subjects.js';
+ import { serializeSession, restoreSession } from '../src/services/sessionSnapshot.js';
+@@ -265,24 +265,61 @@ test('rotation : le cadre de sélection tourne avec le sujet autour de l\'appui'
+   });
+ });
+ 
+-test('annotations : pas de ligne de comparaison pour un sujet pivoté, hauteur réelle conservée', () => {
+-  const run = (subject) =>
+-    getAnnotationItems({
+-      subjects: [subject],
+-      selectedId: 'a',
+-      annotations: { enabled: true, scope: 'selected' },
+-      floorY: FLOOR_Y,
+-      unit: 'cm',
+-    })[0];
+-
+-  const upright = run(makeSubject());
+-  const tilted = run(makeSubject({ rotation: 30 }));
+-
+-  assert.equal(upright.showLine, true);
+-  assert.equal(upright.labelX, 700);
+-  assert.equal(tilted.showLine, false);
+-  assert.equal(tilted.text, upright.text);
+-  assert.equal(tilted.labelX, getSubjectGeometry(makeSubject({ rotation: 30 }), FLOOR_Y).head.x);
++const runAnnotation = (subject, annotations = { enabled: true, scope: 'selected' }) =>
++  getAnnotationItems({ subjects: [subject], selectedId: 'a', annotations, floorY: FLOOR_Y, unit: 'cm' });
++
++test('annotations : sujet à 0° inchangé (ligne sur la zone visible, étiquette centrée)', () => {
++  const item = runAnnotation(makeSubject())[0];
++  const { visible, head } = getSubjectGeometry(makeSubject(), FLOOR_Y);
++  assert.equal(item.showLine, true);
++  assert.equal(item.labelX, 700);
++  assert.equal(item.lineY, head.y);
++  assert.equal(item.lineX1, visible.left - ANNOTATION_STYLE.linePadding);
++  assert.equal(item.lineX2, visible.left + visible.width + ANNOTATION_STYLE.linePadding);
++});
++
++[-135, -60, -30, 30, 90, 150, 180].forEach((rotation) => {
++  [false, true].forEach((flipX) => {
++    test(`annotations : la ligne de tête est conservée et suit le repère à ${rotation}° (miroir ${flipX})`, () => {
++      const subject = makeSubject({ rotation, flipX });
++      const upright = runAnnotation(makeSubject({ flipX }))[0];
++      const item = runAnnotation(subject)[0];
++      const geometry = getSubjectGeometry(subject, FLOOR_Y);
++      const { box } = geometry;
++      const expectedHead = applyStepsToPoint(geometry.transformSteps, {
++        x: box.left + subject.headAnchor.x * box.width,
++        y: box.top + subject.headAnchor.y * box.height,
++      });
++
++      assert.equal(item.showLine, true);
++      assert.ok(Math.abs(item.lineY - expectedHead.y) < 1e-6);
++      assert.ok(Math.abs(item.lineY - geometry.head.y) < 1e-6);
++      assert.ok(item.lineX1 < expectedHead.x && item.lineX2 > expectedHead.x);
++      assert.ok(item.lineX1 <= geometry.projectedBounds.left - ANNOTATION_STYLE.linePadding + 1e-6);
++      assert.ok(item.lineX2 >= geometry.projectedBounds.left + geometry.projectedBounds.width + ANNOTATION_STYLE.linePadding - 1e-6);
++      assert.ok(Math.abs(item.labelX - expectedHead.x) < 1e-6);
++      assert.ok(item.labelY <= item.lineY || item.labelY === ANNOTATION_STYLE.fontSize + 8);
++      assert.equal(item.text, upright.text);
++      assert.equal(item.id, 'a');
++    });
++  });
++});
++
++test('annotations : la ligne ne se confond pas avec le haut de la boîte englobante', () => {
++  const subject = makeSubject({ rotation: 30 });
++  const item = runAnnotation(subject)[0];
++  const { projectedBounds, head } = getSubjectGeometry(subject, FLOOR_Y);
++  assert.equal(item.lineY, head.y);
++  assert.ok(item.lineY > projectedBounds.top + 1);
++});
++
++test('annotations : hauteur réelle affichée indépendante de la rotation', () => {
++  const texts = [0, 30, -75, 180].map((rotation) => runAnnotation(makeSubject({ rotation }))[0].text);
++  assert.equal(new Set(texts).size, 1);
++});
++
++test('annotations désactivées : rien n\'est produit, même pour un sujet pivoté', () => {
++  assert.deepEqual(runAnnotation(makeSubject({ rotation: 30 }), { enabled: false, scope: 'all' }), []);
+ });
+ 
+ test('création : un nouveau sujet démarre à 0°', () => {

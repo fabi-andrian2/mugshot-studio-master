@@ -1,0 +1,1065 @@
+diff --git a/src/app/App.jsx b/src/app/App.jsx
+index 9266429..890a184 100644
+--- a/src/app/App.jsx
++++ b/src/app/App.jsx
+@@ -10,6 +10,7 @@ import {
+ } from "../domain/constants.js";
+ import {
+   getSubjectGeometry,
++  keepPivotOnScaleChange,
+   getMeasuredHeightPx,
+   getScaleForGroundToTopPx,
+   getAnchorUpdateForCanvasPoint,
+@@ -116,7 +117,12 @@ import FormatDialog from "../components/dialogs/FormatDialog.jsx";
+ import StatusBar from "../components/status/StatusBar.jsx";
+ import { getGridPalette, getGridTone } from "../domain/gridContrast.js";
+ import { isForeignPointer } from "../domain/pointerGesture.js";
+-import { isRotated } from "../domain/rotation.js";
++import { getRotation } from "../domain/rotation.js";
++import {
++  getResizeDistancePx,
++  getRotationForPointer,
++  startRotationGesture,
++} from "../domain/transformGesture.js";
+ 
+ const HISTORY_OPTIONS = {
+   isEqual: areDocumentStatesEqual,
+@@ -128,10 +134,19 @@ const isTextField = (el) =>
+   el.tagName === "TEXTAREA" || (el.tagName === "INPUT" && el.type !== "range");
+ 
+ const markManual = (upd) =>
+-  Object.prototype.hasOwnProperty.call(upd, "x")
++  Object.prototype.hasOwnProperty.call(upd, "x") && !upd.groundAnchor
+     ? { ...upd, placement: "manual" }
+     : upd;
+ 
++const withUpdate = (subject, upd) => {
++  const resolved = keepPivotOnScaleChange(subject, upd);
++  return {
++    ...subject,
++    ...markManual(upd),
++    ...(resolved.x === upd.x ? null : { x: resolved.x }),
++  };
++};
++
+ const shiftScale = (subject, delta) =>
+   clampScale(getMeasuredHeightPx(subject), subject.scale + delta);
+ 
+@@ -177,6 +192,7 @@ const MugshotStudio = () => {
+   const [dragInfo, setDragInfo] = useState(null);
+   const [resizeInfo, setResizeInfo] = useState(null);
+   const [anchorInfo, setAnchorInfo] = useState(null);
++  const [rotateInfo, setRotateInfo] = useState(null);
+   const [isSnapping, setIsSnapping] = useState(false);
+ 
+   const [showSettings, setShowSettings] = useState(false);
+@@ -280,8 +296,8 @@ const MugshotStudio = () => {
+     };
+   }, []);
+ 
+-  const gestureActive = !!dragInfo || !!resizeInfo || !!anchorInfo;
+-  const gesturePointerId = (dragInfo ?? resizeInfo ?? anchorInfo)?.pointerId ?? null;
++  const gestureActive = !!dragInfo || !!resizeInfo || !!anchorInfo || !!rotateInfo;
++  const gesturePointerId = (dragInfo ?? resizeInfo ?? anchorInfo ?? rotateInfo)?.pointerId ?? null;
+ 
+   const handleUndo = useCallback(() => {
+     if (gestureActive) return;
+@@ -298,7 +314,7 @@ const MugshotStudio = () => {
+   const updateSubject = useCallback(
+     (id, upd) => {
+       setLive((list) =>
+-        list.map((s) => (s.id === id ? { ...s, ...markManual(upd) } : s)),
++        list.map((s) => (s.id === id ? withUpdate(s, upd) : s)),
+       );
+     },
+     [setLive],
+@@ -308,7 +324,7 @@ const MugshotStudio = () => {
+     (id, upd, mergeKey) => {
+       apply(
+         (list) =>
+-          list.map((s) => (s.id === id ? { ...s, ...markManual(upd) } : s)),
++          list.map((s) => (s.id === id ? withUpdate(s, upd) : s)),
+         mergeKey,
+       );
+     },
+@@ -448,7 +464,6 @@ const MugshotStudio = () => {
+     e.stopPropagation();
+     e.currentTarget.setPointerCapture(e.pointerId);
+     const s = subjects.find((x) => x.id === id);
+-    if (isRotated(s)) return;
+     const { visible, anchor } = getSubjectGeometry(s, floorY);
+     setResizeInfo({
+       id,
+@@ -462,13 +477,36 @@ const MugshotStudio = () => {
+ 
+   const handleAnchorPointerDown = (e, id, kind) => {
+     if (e.button !== 0 || isSpacePressed || isForeignPointer(gesturePointerId, e.pointerId)) return;
+-    if (isRotated(subjects.find((x) => x.id === id))) return;
+     e.stopPropagation();
+     e.currentTarget.setPointerCapture(e.pointerId);
+     setSelectedId(id);
+     setAnchorInfo({ id, kind, pointerId: e.pointerId });
+   };
+ 
++  const getCanvasPoint = useCallback(
++    (e) => {
++      const workspace = workspaceRef.current;
++      if (!workspace) return null;
++      const rect = workspace.getBoundingClientRect();
++      return { x: (e.clientX - rect.left) / zoom, y: (e.clientY - rect.top) / zoom };
++    },
++    [zoom],
++  );
++
++  const handleRotatePointerDown = (e, id) => {
++    if (e.button !== 0 || isSpacePressed || isForeignPointer(gesturePointerId, e.pointerId)) return;
++    e.stopPropagation();
++    const s = subjects.find((x) => x.id === id);
++    const point = getCanvasPoint(e);
++    if (!s || !point) return;
++    const { anchor, rotation } = getSubjectGeometry(s, floorY);
++    const gesture = startRotationGesture({ pivot: anchor, point, rotation });
++    if (!gesture) return;
++    e.currentTarget.setPointerCapture(e.pointerId);
++    setSelectedId(id);
++    setRotateInfo({ id, pointerId: e.pointerId, gesture });
++  };
++
+   const onDragMove = useCallback(
+     (e) => {
+       if (isForeignPointer(gesturePointerId, e.pointerId)) return;
+@@ -487,19 +525,25 @@ const MugshotStudio = () => {
+       } else if (resizeInfo) {
+         const s = subjects.find((x) => x.id === resizeInfo.id);
+         if (!s) return;
+-        const dy = (resizeInfo.startY - e.clientY) / zoom;
++        const delta = {
++          x: (e.clientX - resizeInfo.startX) / zoom,
++          y: (e.clientY - resizeInfo.startY) / zoom,
++        };
+         updateSubject(resizeInfo.id, {
+-          scale: getScaleForGroundToTopPx(s, resizeInfo.initH + dy),
++          scale: getScaleForGroundToTopPx(
++            s,
++            getResizeDistancePx(resizeInfo.initH, delta, getRotation(s)),
++          ),
+         });
++      } else if (rotateInfo) {
++        const point = getCanvasPoint(e);
++        if (!point) return;
++        const rotation = getRotationForPointer(rotateInfo.gesture, point, { snap: e.shiftKey });
++        if (rotation !== null) updateSubject(rotateInfo.id, { rotation });
+       } else if (anchorInfo) {
+         const s = subjects.find((x) => x.id === anchorInfo.id);
+-        const workspace = workspaceRef.current;
+-        if (!s || !workspace) return;
+-        const rect = workspace.getBoundingClientRect();
+-        const point = {
+-          x: (e.clientX - rect.left) / zoom,
+-          y: (e.clientY - rect.top) / zoom,
+-        };
++        const point = getCanvasPoint(e);
++        if (!s || !point) return;
+         const update =
+           anchorInfo.kind === "head"
+             ? getHeadUpdateForCanvasPoint(s, floorY, point)
+@@ -511,6 +555,8 @@ const MugshotStudio = () => {
+       dragInfo,
+       resizeInfo,
+       anchorInfo,
++      rotateInfo,
++      getCanvasPoint,
+       gesturePointerId,
+       zoom,
+       canvasW,
+@@ -527,6 +573,7 @@ const MugshotStudio = () => {
+       setDragInfo(null);
+       setResizeInfo(null);
+       setAnchorInfo(null);
++      setRotateInfo(null);
+       setIsSnapping(false);
+       commit();
+     },
+@@ -537,6 +584,7 @@ const MugshotStudio = () => {
+     setDragInfo(null);
+     setResizeInfo(null);
+     setAnchorInfo(null);
++    setRotateInfo(null);
+     setIsSnapping(false);
+     rollback();
+   }, [rollback]);
+@@ -550,7 +598,7 @@ const MugshotStudio = () => {
+   );
+ 
+   useEffect(() => {
+-    if (!dragInfo && !resizeInfo && !anchorInfo) return;
++    if (!dragInfo && !resizeInfo && !anchorInfo && !rotateInfo) return;
+     window.addEventListener("pointermove", onDragMove);
+     window.addEventListener("pointerup", onDragUp);
+     window.addEventListener("pointercancel", onPointerCancel);
+@@ -559,7 +607,7 @@ const MugshotStudio = () => {
+       window.removeEventListener("pointerup", onDragUp);
+       window.removeEventListener("pointercancel", onPointerCancel);
+     };
+-  }, [dragInfo, resizeInfo, anchorInfo, onDragMove, onDragUp, onPointerCancel]);
++  }, [dragInfo, resizeInfo, anchorInfo, rotateInfo, onDragMove, onDragUp, onPointerCancel]);
+ 
+   useEffect(() => {
+     const onKey = (e) => {
+@@ -991,6 +1039,7 @@ const MugshotStudio = () => {
+                 onAnchorStart={(e, kind) =>
+                   handleAnchorPointerDown(e, s.id, kind)
+                 }
++                onRotateStart={(e) => handleRotatePointerDown(e, s.id)}
+               />
+             ))}
+ 
+diff --git a/src/components/canvas/SelectionOverlay.jsx b/src/components/canvas/SelectionOverlay.jsx
+index 177947a..841ce4a 100644
+--- a/src/components/canvas/SelectionOverlay.jsx
++++ b/src/components/canvas/SelectionOverlay.jsx
+@@ -1,3 +1,5 @@
++import { getResizeCursor } from '../../domain/transformGesture.js';
++
+ const HANDLE_SCREEN_PX = 14;
+ const FRAME_SCREEN_PX = 2;
+ 
+@@ -7,7 +9,7 @@ const HANDLES = [
+   { type: 'top-right', left: '100%', cursor: 'nesw-resize' },
+ ];
+ 
+-const SelectionOverlay = ({ zoom, onResizeStart, showHandles = true }) => {
++const SelectionOverlay = ({ zoom, onResizeStart, showHandles = true, rotation = 0, mirrored = false }) => {
+   const handleSize = HANDLE_SCREEN_PX / zoom;
+   const frame = FRAME_SCREEN_PX / zoom;
+ 
+@@ -32,7 +34,7 @@ const SelectionOverlay = ({ zoom, onResizeStart, showHandles = true }) => {
+             marginTop: -handleSize / 2,
+             border: `${frame * 1.5}px solid #10b981`,
+             boxSizing: 'border-box',
+-            cursor: handle.cursor,
++            cursor: rotation === 0 ? handle.cursor : getResizeCursor(handle.type, rotation, mirrored),
+           }}
+         />
+       ))}
+diff --git a/src/components/canvas/SubjectView.jsx b/src/components/canvas/SubjectView.jsx
+index 6b8a222..d06b987 100644
+--- a/src/components/canvas/SubjectView.jsx
++++ b/src/components/canvas/SubjectView.jsx
+@@ -1,6 +1,7 @@
+ import { getSubjectGeometry } from '../../domain/geometry.js';
+ import { getSilhouetteStyle, isSubjectVisible } from '../../domain/appearance.js';
+ import { stepsToCssTransform } from '../../domain/rotation.js';
++import { ROTATE_HANDLE_OFFSET_SCREEN_PX, getRotationHandle } from '../../domain/transformGesture.js';
+ import SelectionOverlay from './SelectionOverlay.jsx';
+ 
+ const MARKER_SCREEN_PX = 30;
+@@ -10,17 +11,15 @@ const MARKER_TITLES = {
+   head: 'Repère de tête : glisser pour le placer sur le sommet réel du crâne',
+ };
+ 
+-const LOCKED_TITLE = 'Déplacement des repères indisponible tant que l\'angle n\'est pas 0°';
+-
+-const AnchorMarker = ({ kind, point, zoom, onPointerDown, locked }) => {
++const AnchorMarker = ({ kind, point, zoom, onPointerDown }) => {
+   const size = MARKER_SCREEN_PX / zoom;
+   const color = MARKER_COLORS[kind];
+ 
+   return (
+     <div
+-      onPointerDown={locked ? undefined : onPointerDown}
+-      title={locked ? LOCKED_TITLE : MARKER_TITLES[kind]}
+-      className={locked ? 'absolute pointer-events-none' : 'absolute cursor-move'}
++      onPointerDown={onPointerDown}
++      title={MARKER_TITLES[kind]}
++      className="absolute cursor-move"
+       style={{
+         left: point.x - size / 2,
+         top: point.y - size / 2,
+@@ -38,6 +37,47 @@ const AnchorMarker = ({ kind, point, zoom, onPointerDown, locked }) => {
+   );
+ };
+ 
++const RotationHandle = ({ geometry, subjectX, zoom, onPointerDown }) => {
++  const { base, tip } = getRotationHandle(
++    { subjectX, visible: geometry.visible, anchor: geometry.anchor, rotation: geometry.rotation },
++    ROTATE_HANDLE_OFFSET_SCREEN_PX / zoom,
++  );
++  const hit = 36 / zoom;
++  const dot = 16 / zoom;
++  const stroke = 2 / zoom;
++
++  return (
++    <>
++      <svg
++        width="1"
++        height="1"
++        className="absolute pointer-events-none"
++        style={{ left: 0, top: 0, overflow: 'visible', zIndex: 99999 }}
++      >
++        <line x1={base.x} y1={base.y} x2={tip.x} y2={tip.y} stroke="#34d399" strokeWidth={stroke} />
++      </svg>
++      <div
++        onPointerDown={onPointerDown}
++        title="Faire glisser pour pivoter autour de l'appui (Maj : pas de 15°)"
++        className="absolute flex items-center justify-center"
++        style={{
++          left: tip.x - hit / 2,
++          top: tip.y - hit / 2,
++          width: hit,
++          height: hit,
++          cursor: 'grab',
++          zIndex: 99999,
++        }}
++      >
++        <div
++          className="bg-white rounded-full pointer-events-none"
++          style={{ width: dot, height: dot, border: `${stroke * 1.5}px solid #10b981`, boxSizing: 'border-box' }}
++        />
++      </div>
++    </>
++  );
++};
++
+ const SubjectView = ({
+   subject,
+   floorY,
+@@ -49,10 +89,12 @@ const SubjectView = ({
+   onDoubleClick,
+   onResizeStart,
+   onAnchorStart,
++  onRotateStart,
+ }) => {
+   if (!isSubjectVisible(subject)) return null;
+ 
+-  const { box, visible, originX, anchor, head, rotation, transformSteps } = getSubjectGeometry(subject, floorY);
++  const geometry = getSubjectGeometry(subject, floorY);
++  const { box, visible, originX, anchor, head, rotation, transformSteps, projectedBounds } = geometry;
+   const rotated = rotation !== 0;
+   const silhouette = getSilhouetteStyle(subject);
+ 
+@@ -110,14 +152,20 @@ const SubjectView = ({
+           zIndex: subject.zIndex,
+         }}
+       >
+-        {selected && <SelectionOverlay zoom={zoom} onResizeStart={onResizeStart} showHandles={!rotated} />}
++        {selected && <SelectionOverlay
++            zoom={zoom}
++            onResizeStart={onResizeStart}
++            rotation={rotation}
++            mirrored={rotated && Boolean(subject.flipX)}
++          />}
+         {grouped && <SelectionOverlay zoom={zoom} showHandles={false} />}
+       </div>
+ 
+       {selected && (
+         <>
+-          <AnchorMarker kind="head" point={head} zoom={zoom} locked={rotated} onPointerDown={e => onAnchorStart(e, 'head')} />
+-          <AnchorMarker kind="ground" point={anchor} zoom={zoom} locked={rotated} onPointerDown={e => onAnchorStart(e, 'ground')} />
++          <AnchorMarker kind="head" point={head} zoom={zoom} onPointerDown={e => onAnchorStart(e, 'head')} />
++          <RotationHandle geometry={geometry} subjectX={subject.x} zoom={zoom} onPointerDown={onRotateStart} />
++          <AnchorMarker kind="ground" point={anchor} zoom={zoom} onPointerDown={e => onAnchorStart(e, 'ground')} />
+         </>
+       )}
+ 
+@@ -126,9 +174,9 @@ const SubjectView = ({
+           <div
+             className="absolute pointer-events-none"
+             style={{
+-              left: visible.left - 40 / zoom,
++              left: (rotated ? projectedBounds : visible).left - 40 / zoom,
+               top: anchor.y - 1 / zoom,
+-              width: visible.width + 80 / zoom,
++              width: (rotated ? projectedBounds : visible).width + 80 / zoom,
+               height: 2 / zoom,
+               background: '#10b981',
+               zIndex: 99997,
+diff --git a/src/components/inspector/Inspector.jsx b/src/components/inspector/Inspector.jsx
+index 81acfcb..aec1165 100644
+--- a/src/components/inspector/Inspector.jsx
++++ b/src/components/inspector/Inspector.jsx
+@@ -339,8 +339,7 @@ const Inspector = ({
+             onCancel={onCancelEdit}
+           />
+           <p className="text-[11px] text-gray-500 leading-snug">
+-            Angle positif : sens horaire. La hauteur réelle ne change pas.
+-            {getRotation(subject) !== 0 && ' Redimensionnement à la souris et repères verrouillés tant que l\'angle n\'est pas 0°.'}
++            Angle positif : sens horaire. La hauteur réelle ne change pas. Poignée au-dessus du cadre : Maj = pas de 15°.
+           </p>
+           <button
+             type="button"
+diff --git a/src/domain/geometry.js b/src/domain/geometry.js
+index ead5b75..51400b8 100644
+--- a/src/domain/geometry.js
++++ b/src/domain/geometry.js
+@@ -1,6 +1,14 @@
+ import { FALLBACK_NATURAL_W, FALLBACK_NATURAL_H, MIN_ANCHOR_SPAN } from './constants.js';
+ import { heightCmFromScale, scaleFromHeightCm, clampScale } from './measurement.js';
+-import { buildSubjectTransform, getBoundsOfPoints, getRotation, rotatePoint } from './rotation.js';
++import {
++  applyStepsToPoint,
++  buildSubjectTransform,
++  getBoundsOfPoints,
++  getRotation,
++  isRotated,
++  rotatePoint,
++  unrotatePoint,
++} from './rotation.js';
+ 
+ const FULL_BOUNDS = { left: 0, top: 0, right: 1, bottom: 1 };
+ 
+@@ -119,26 +127,55 @@ export const getSubjectGeometry = (subject, floorY) => {
+ };
+ 
+ const pointToImage = (subject, floorY, point) => {
+-  const { box } = getSubjectGeometry(subject, floorY);
+-  const unflippedX = subject.flipX ? 2 * subject.x - point.x : point.x;
++  const { box, anchor, rotation } = getSubjectGeometry(subject, floorY);
++  const local = unrotatePoint(point, anchor, rotation);
++  const unflippedX = subject.flipX ? 2 * subject.x - local.x : local.x;
+   return {
+     box,
+     x: clamp((unflippedX - box.left) / box.width, 0, 1),
+-    y: (point.y - box.top) / box.height,
++    y: (local.y - box.top) / box.height,
+   };
+ };
+ 
++const getSpriteOrigin = (subject, floorY) => {
++  const { box, transformSteps } = getSubjectGeometry(subject, floorY);
++  return applyStepsToPoint(transformSteps, { x: box.left, y: box.top });
++};
++
+ export const getAnchorUpdateForCanvasPoint = (subject, floorY, point) => {
+   const { box, x, y: rawY } = pointToImage(subject, floorY, point);
+   const y = clamp(rawY, Math.min(getHeadAnchor(subject).y + MIN_ANCHOR_SPAN, 1), 1);
+-  return {
++  const update = {
+     groundAnchor: { x, y },
+     y: floorY - (box.top + y * box.height),
+   };
++  if (!isRotated(subject)) return update;
++
++  const before = getSpriteOrigin(subject, floorY);
++  const after = getSpriteOrigin({ ...subject, ...update }, floorY);
++  return {
++    ...update,
++    x: subject.x + (before.x - after.x),
++    y: update.y - (before.y - after.y),
++  };
+ };
+ 
+ export const getHeadUpdateForCanvasPoint = (subject, floorY, point) => {
+   const { x, y: rawY } = pointToImage(subject, floorY, point);
+   const y = clamp(rawY, 0, Math.max(0, getGroundAnchor(subject).y - MIN_ANCHOR_SPAN));
+   return { headAnchor: { x, y } };
+-};
+\ No newline at end of file
++};
++
++export const keepPivotOnScaleChange = (subject, update) => {
++  if (update.scale === undefined || update.x !== undefined || !isRotated(subject)) return update;
++  const bounds = getVisibleBounds(subject);
++  const natural = getNaturalSize(subject);
++  const offset = (getGroundAnchor(subject).x - (bounds.left + bounds.right) / 2) * natural.width;
++  const side = subject.flipX ? -1 : 1;
++  return { ...update, x: subject.x + side * offset * (subject.scale - update.scale) };
++};
++
++export const getSubjectFootprint = (subject, floorY) => {
++  const { visible, projectedBounds } = getSubjectGeometry(subject, floorY);
++  return isRotated(subject) ? projectedBounds : visible;
++};
+diff --git a/src/domain/layout.js b/src/domain/layout.js
+index 9c8a21c..22f9d19 100644
+--- a/src/domain/layout.js
++++ b/src/domain/layout.js
+@@ -1,11 +1,18 @@
+-import { getSubjectGeometry, getSubjectHeightCm } from './geometry.js';
++import { getSubjectFootprint, getSubjectHeightCm } from './geometry.js';
++import { isRotated } from './rotation.js';
+ 
+ export const LAYOUT_SIDE_MARGIN = 180;
+ export const LAYOUT_MAX_GAP = 120;
+ export const LAYOUT_MAX_OVERLAP_RATIO = 0.3;
+ export const IMPORT_GAP = 60;
+ 
+-const getVisibleRect = (subject, floorY) => getSubjectGeometry(subject, floorY).visible;
++const getVisibleRect = (subject, floorY) => getSubjectFootprint(subject, floorY);
++
++const getCenterOffset = (subject, floorY) => {
++  if (!isRotated(subject)) return 0;
++  const rect = getVisibleRect(subject, floorY);
++  return rect.left + rect.width / 2 - subject.x;
++};
+ 
+ export const sortSubjects = (subjects, order) => {
+   const list = [...subjects];
+@@ -22,6 +29,7 @@ export const layoutRow = (ordered, { canvasW, floorY }) => {
+   if (ordered.length === 0) return { positions: [], gap: 0, fits: true };
+ 
+   const widths = ordered.map((subject) => getVisibleRect(subject, floorY).width);
++  const offsets = ordered.map((subject) => getCenterOffset(subject, floorY));
+   const total = widths.reduce((sum, width) => sum + width, 0);
+   const count = ordered.length;
+   const available = canvasW - 2 * LAYOUT_SIDE_MARGIN;
+@@ -32,7 +40,7 @@ export const layoutRow = (ordered, { canvasW, floorY }) => {
+ 
+   let cursor = canvasW / 2 - (total + gap * (count - 1)) / 2;
+   const positions = ordered.map((subject, i) => {
+-    const x = cursor + widths[i] / 2;
++    const x = cursor + widths[i] / 2 - offsets[i];
+     cursor += widths[i] + gap;
+     return { id: subject.id, x };
+   });
+@@ -81,6 +89,7 @@ export const layoutOnImport = (existing, created, { canvasW, floorY }) => {
+   }
+ 
+   const widths = created.map((subject) => getVisibleRect(subject, floorY).width);
++  const offsets = created.map((subject) => getCenterOffset(subject, floorY));
+   const rowWidth = widths.reduce((sum, width) => sum + width, 0) + IMPORT_GAP * (created.length - 1);
+   const rightEdge = Math.max(
+     ...existing.map((subject) => {
+@@ -93,7 +102,7 @@ export const layoutOnImport = (existing, created, { canvasW, floorY }) => {
+   if (startLeft + rowWidth <= canvasW - LAYOUT_SIDE_MARGIN) {
+     let cursor = startLeft;
+     const positions = created.map((subject, i) => {
+-      const x = cursor + widths[i] / 2;
++      const x = cursor + widths[i] / 2 - offsets[i];
+       cursor += widths[i] + IMPORT_GAP;
+       return { id: subject.id, x };
+     });
+diff --git a/src/domain/transformGesture.js b/src/domain/transformGesture.js
+new file mode 100644
+index 0000000..7f6cc73
+--- /dev/null
++++ b/src/domain/transformGesture.js
+@@ -0,0 +1,48 @@
++import { normalizeAngle, rotatePoint } from './rotation.js';
++
++export const ROTATION_SNAP_STEP = 15;
++export const ROTATE_HANDLE_OFFSET_SCREEN_PX = 44;
++
++const MIN_GESTURE_RADIUS = 2;
++
++const toDegrees = (radians) => (radians * 180) / Math.PI;
++
++const wrapDelta = (degrees) => {
++  const wrapped = ((degrees % 360) + 360) % 360;
++  return wrapped > 180 ? wrapped - 360 : wrapped;
++};
++
++const getPointerAngle = (pivot, point) => toDegrees(Math.atan2(point.x - pivot.x, pivot.y - point.y));
++
++const getDistance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
++
++export const startRotationGesture = ({ pivot, point, rotation }) => {
++  if (getDistance(pivot, point) < MIN_GESTURE_RADIUS) return null;
++  return { pivot, startAngle: getPointerAngle(pivot, point), initRotation: normalizeAngle(rotation) };
++};
++
++export const getRotationForPointer = (gesture, point, { snap = false } = {}) => {
++  if (getDistance(gesture.pivot, point) < MIN_GESTURE_RADIUS) return null;
++  const delta = wrapDelta(getPointerAngle(gesture.pivot, point) - gesture.startAngle);
++  const raw = gesture.initRotation + delta;
++  const target = snap ? Math.round(raw / ROTATION_SNAP_STEP) * ROTATION_SNAP_STEP : raw;
++  return normalizeAngle(Math.round(target * 1e4) / 1e4);
++};
++
++export const getRotationHandle = ({ subjectX, visible, anchor, rotation }, offsetPx) => ({
++  base: rotatePoint({ x: subjectX, y: visible.top }, anchor, rotation),
++  tip: rotatePoint({ x: subjectX, y: visible.top - offsetPx }, anchor, rotation),
++});
++
++export const getResizeDistancePx = (initDistance, delta, rotation) =>
++  initDistance - rotatePoint(delta, { x: 0, y: 0 }, -rotation).y;
++
++const CURSORS = ['ns-resize', 'nesw-resize', 'ew-resize', 'nwse-resize'];
++
++export const getResizeCursor = (handle, rotation, mirrored) => {
++  const sideX = { 'top-left': -1, 'top-center': 0, 'top-right': 1 }[handle];
++  const local = { x: mirrored ? -sideX : sideX, y: -1 };
++  const turned = rotatePoint(local, { x: 0, y: 0 }, rotation);
++  const axis = (toDegrees(Math.atan2(turned.x, -turned.y)) + 360) % 180;
++  return CURSORS[Math.round(axis / 45) % 4];
++};
+diff --git a/src/domain/views.js b/src/domain/views.js
+index 61ba789..9878d2a 100644
+--- a/src/domain/views.js
++++ b/src/domain/views.js
+@@ -1,4 +1,5 @@
+-import { getSubjectGeometry } from './geometry.js';
++import { getSubjectFootprint, getSubjectGeometry } from './geometry.js';
++import { getBoundsOfPoints, isRotated, rotatePoint } from './rotation.js';
+ import { isSubjectVisible } from './appearance.js';
+ 
+ export const MIN_ZOOM = 0.1;
+@@ -28,8 +29,19 @@ export const getViewForRect = ({ rect, container, canvas, padding = 0, zoom }) =
+   };
+ };
+ 
++const projectRect = (subject, geometry, rect) => {
++  if (!isRotated(subject)) return rect;
++  const corners = [
++    { x: rect.left, y: rect.top },
++    { x: rect.left + rect.width, y: rect.top },
++    { x: rect.left + rect.width, y: rect.top + rect.height },
++    { x: rect.left, y: rect.top + rect.height },
++  ];
++  return getBoundsOfPoints(corners.map((corner) => rotatePoint(corner, geometry.anchor, geometry.rotation)));
++};
++
+ export const getSubjectRect = (subject, floorY) =>
+-  isSubjectVisible(subject) ? getSubjectGeometry(subject, floorY).visible : null;
++  isSubjectVisible(subject) ? getSubjectFootprint(subject, floorY) : null;
+ 
+ export const getCompositionRect = (subjects, floorY) => {
+   const rects = subjects.map((subject) => getSubjectRect(subject, floorY)).filter(Boolean);
+@@ -44,11 +56,17 @@ export const getCompositionRect = (subjects, floorY) => {
+ };
+ 
+ export const getBustRect = (subject, floorY) => {
+-  const rect = getSubjectRect(subject, floorY);
+-  if (!rect) return null;
++  if (!isSubjectVisible(subject)) return null;
++  const geometry = getSubjectGeometry(subject, floorY);
++  const rect = geometry.visible;
+ 
+   const height = rect.height * BUST_HEIGHT_RATIO;
+   const width = Math.min(rect.width, height * BUST_ASPECT);
+ 
+-  return { left: rect.left + (rect.width - width) / 2, top: rect.top, width, height };
+-};
+\ No newline at end of file
++  return projectRect(subject, geometry, {
++    left: rect.left + (rect.width - width) / 2,
++    top: rect.top,
++    width,
++    height,
++  });
++};
+diff --git a/tests/freeTransform.test.js b/tests/freeTransform.test.js
+new file mode 100644
+index 0000000..7e341de
+--- /dev/null
++++ b/tests/freeTransform.test.js
+@@ -0,0 +1,419 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++
++import {
++  getSubjectGeometry,
++  getSubjectHeightCm,
++  getScaleForGroundToTopPx,
++  getAnchorUpdateForCanvasPoint,
++  getHeadUpdateForCanvasPoint,
++  keepPivotOnScaleChange,
++  getSubjectFootprint,
++} from '../src/domain/geometry.js';
++import { applyStepsToPoint, normalizeAngle, rotatePoint } from '../src/domain/rotation.js';
++import {
++  startRotationGesture,
++  getRotationForPointer,
++  getRotationHandle,
++  getResizeDistancePx,
++  getResizeCursor,
++} from '../src/domain/transformGesture.js';
++import { arrangeSubjects, layoutRow, layoutOnImport } from '../src/domain/layout.js';
++import { getSubjectRect, getCompositionRect, getBustRect } from '../src/domain/views.js';
++import { createHistoryState, historyReducer } from '../src/hooks/useHistory.js';
++import { areSubjectListsEqual } from '../src/domain/subjects.js';
++
++const close = (actual, expected, epsilon = 1e-6) =>
++  assert.ok(Math.abs(actual - expected) < epsilon, `${actual} différent de ${expected}`);
++
++const FLOOR_Y = 2000;
++const CANVAS_W = 2800;
++const context = { canvasW: CANVAS_W, floorY: FLOOR_Y };
++
++const make = (id, overrides = {}) => ({
++  id,
++  name: id,
++  x: 1000,
++  y: 0,
++  scale: 1,
++  zIndex: 1,
++  flipX: false,
++  rotation: 0,
++  placement: 'auto',
++  visible: true,
++  naturalW: 400,
++  naturalH: 1000,
++  visibleBounds: { left: 0.1, top: 0.05, right: 0.9, bottom: 0.98 },
++  groundAnchor: { x: 0.4, y: 0.95 },
++  headAnchor: { x: 0.55, y: 0.07 },
++  ...overrides,
++});
++
++const spriteCorners = (subject) => {
++  const { box, transformSteps } = getSubjectGeometry(subject, FLOOR_Y);
++  return [
++    { x: box.left, y: box.top },
++    { x: box.left + box.width, y: box.top },
++    { x: box.left + box.width, y: box.top + box.height },
++    { x: box.left, y: box.top + box.height },
++  ].map((corner) => applyStepsToPoint(transformSteps, corner));
++};
++
++const assertSameSprite = (a, b, epsilon = 1e-6) => {
++  const ca = spriteCorners(a);
++  const cb = spriteCorners(b);
++  ca.forEach((corner, i) => {
++    close(corner.x, cb[i].x, epsilon);
++    close(corner.y, cb[i].y, epsilon);
++  });
++};
++
++const apply = (subject, update) => ({ ...subject, ...update });
++
++test('rotation par poignée : aucun saut au premier mouvement', () => {
++  const pivot = { x: 500, y: 1000 };
++  const gesture = startRotationGesture({ pivot, point: { x: 560, y: 800 }, rotation: 33.27 });
++  close(getRotationForPointer(gesture, { x: 560, y: 800 }), 33.27);
++});
++
++test('rotation par poignée : sens horaire positif et antihoraire négatif', () => {
++  const pivot = { x: 500, y: 1000 };
++  const gesture = startRotationGesture({ pivot, point: { x: 500, y: 800 }, rotation: 0 });
++  close(getRotationForPointer(gesture, { x: 700, y: 1000 }), 90);
++  close(getRotationForPointer(gesture, { x: 300, y: 1000 }), -90);
++  close(getRotationForPointer(gesture, { x: 500, y: 1200 }), 180);
++});
++
++test('rotation par poignée : passage continu de la frontière ±180°', () => {
++  const pivot = { x: 0, y: 0 };
++  const gesture = startRotationGesture({ pivot, point: { x: 100, y: 0 }, rotation: 90 });
++  let previous = getRotationForPointer(gesture, { x: 100, y: 0 });
++  let maxStep = 0;
++  for (let deg = 0; deg <= 90; deg += 1) {
++    const radians = (deg * Math.PI) / 180;
++    const point = { x: 100 * Math.cos(radians), y: 100 * Math.sin(radians) };
++    const next = getRotationForPointer(gesture, point);
++    const step = Math.abs(((next - previous + 540) % 360) - 180);
++    maxStep = Math.max(maxStep, step);
++    previous = next;
++  }
++  assert.ok(maxStep <= 1.0001, `saut de ${maxStep}°`);
++  close(previous, 180);
++});
++
++test('rotation par poignée : démarrage depuis un angle existant et retour', () => {
++  const pivot = { x: 0, y: 0 };
++  const gesture = startRotationGesture({ pivot, point: { x: 0, y: -100 }, rotation: -170 });
++  close(getRotationForPointer(gesture, { x: -100, y: 0 }), 100);
++  close(getRotationForPointer(gesture, { x: 100, y: 0 }), -80);
++});
++
++test('rotation par poignée : pas de 15° avec Maj, et point trop proche du pivot ignoré', () => {
++  const pivot = { x: 0, y: 0 };
++  const gesture = startRotationGesture({ pivot, point: { x: 0, y: -100 }, rotation: 0 });
++  const radians = (37 * Math.PI) / 180;
++  const point = { x: 100 * Math.sin(radians), y: -100 * Math.cos(radians) };
++  close(getRotationForPointer(gesture, point, { snap: true }), 30);
++  assert.equal(getRotationForPointer(gesture, { x: 0.5, y: 0.5 }), null);
++  assert.equal(startRotationGesture({ pivot, point: { x: 1, y: 0 }, rotation: 0 }), null);
++});
++
++test('rotation par poignée : le résultat est identique quel que soit le zoom', () => {
++  const gesture = startRotationGesture({ pivot: { x: 500, y: 1000 }, point: { x: 500, y: 800 }, rotation: 10 });
++  const screenFor = (zoom) => ({ x: (500 + 120) * zoom, y: (1000 - 80) * zoom });
++  const values = [0.2, 1, 1.5].map((zoom) => {
++    const screen = screenFor(zoom);
++    return getRotationForPointer(gesture, { x: screen.x / zoom, y: screen.y / zoom });
++  });
++  close(values[0], values[1]);
++  close(values[1], values[2]);
++});
++
++test('la poignée suit le cadre, avec ou sans miroir', () => {
++  [false, true].forEach((flipX) => {
++    const subject = make('a', { rotation: 90, flipX });
++    const geometry = getSubjectGeometry(subject, FLOOR_Y);
++    const { base, tip } = getRotationHandle(
++      { subjectX: subject.x, visible: geometry.visible, anchor: geometry.anchor, rotation: geometry.rotation },
++      50,
++    );
++    const top = applyStepsToPoint(geometry.transformSteps, { x: subject.x, y: geometry.visible.top });
++    close(base.x, top.x);
++    close(base.y, top.y);
++    close(Math.hypot(tip.x - base.x, tip.y - base.y), 50);
++  });
++  const upright = make('b');
++  const g = getSubjectGeometry(upright, FLOOR_Y);
++  const handle = getRotationHandle({ subjectX: upright.x, visible: g.visible, anchor: g.anchor, rotation: 0 }, 50);
++  close(handle.tip.x, upright.x);
++  close(handle.tip.y, g.visible.top - 50);
++});
++
++const HISTORY = { isEqual: areSubjectListsEqual, limit: 50, mergeWindowMs: 500 };
++const preview = (state, rotation) =>
++  historyReducer(state, { type: 'set', updater: (list) => list.map((s) => ({ ...s, rotation })) });
++
++test('geste de rotation : une seule entrée Undo/Redo, rollback propre, geste vide ignoré', () => {
++  let state = createHistoryState([make('a')]);
++  [10, 25, 40].forEach((angle) => {
++    state = preview(state, angle);
++  });
++  state = historyReducer(state, { type: 'commit', mergeKey: null, time: 0, ...HISTORY });
++  assert.equal(state.past.length, 1);
++  state = historyReducer(state, { type: 'undo' });
++  assert.equal(state.present[0].rotation, 0);
++  state = historyReducer(state, { type: 'redo' });
++  assert.equal(state.present[0].rotation, 40);
++
++  let cancelled = createHistoryState([make('a')]);
++  cancelled = preview(cancelled, 80);
++  cancelled = historyReducer(cancelled, { type: 'rollback' });
++  assert.equal(cancelled.present[0].rotation, 0);
++  assert.equal(cancelled.past.length, 0);
++
++  let untouched = createHistoryState([make('a')]);
++  untouched = historyReducer(untouched, { type: 'commit', mergeKey: null, time: 0, ...HISTORY });
++  assert.equal(untouched.past.length, 0);
++});
++
++[0, 30, 45, 90, -135].forEach((rotation) => {
++  [false, true].forEach((flipX) => {
++    test(`redimensionnement à ${rotation}° (miroir ${flipX}) : pivot fixe, proportions et hauteur cohérentes`, () => {
++      const subject = make('a', { rotation, flipX });
++      const before = getSubjectGeometry(subject, FLOOR_Y);
++      const initH = before.anchor.y - before.visible.top;
++      const delta = rotatePoint({ x: 0, y: -120 }, { x: 0, y: 0 }, rotation);
++      const distance = getResizeDistancePx(initH, delta, rotation);
++      close(distance, initH + 120);
++
++      const scale = getScaleForGroundToTopPx(subject, distance);
++      const update = keepPivotOnScaleChange(subject, { scale });
++      const next = apply(subject, update);
++      const after = getSubjectGeometry(next, FLOOR_Y);
++
++      if (rotation !== 0) {
++        close(after.anchor.x, before.anchor.x);
++        close(after.anchor.y, before.anchor.y);
++      } else {
++        assert.equal(update.x, undefined);
++      }
++      close(after.box.width / after.box.height, before.box.width / before.box.height);
++      close(after.anchor.y - after.visible.top, distance);
++      close(getSubjectHeightCm(next), getSubjectHeightCm({ ...subject, scale }));
++    });
++  });
++});
++
++test('redimensionnement : la souris suit l\'axe local, pas l\'axe écran', () => {
++  const horizontalOnScreen = { x: 80, y: 0 };
++  close(getResizeDistancePx(500, horizontalOnScreen, 0), 500);
++  close(getResizeDistancePx(500, { x: 80, y: 0 }, 90), 580);
++  close(getResizeDistancePx(500, { x: 0, y: -80 }, 90), 500);
++  close(getResizeDistancePx(500, { x: 0, y: -80 }, 0), 580);
++});
++
++test('redimensionnement à 0° : comportement historique inchangé', () => {
++  const subject = make('a', { flipX: true });
++  assert.deepEqual(keepPivotOnScaleChange(subject, { scale: 1.4 }), { scale: 1.4 });
++  const delta = { x: 12, y: -33 };
++  assert.equal(getResizeDistancePx(300, delta, 0), 300 - delta.y);
++});
++
++test('changement d\'échelle d\'un sujet pivoté : le pivot ne glisse pas (inspecteur et clavier compris)', () => {
++  const subject = make('a', { rotation: 60, flipX: true });
++  const before = getSubjectGeometry(subject, FLOOR_Y);
++  const next = apply(subject, keepPivotOnScaleChange(subject, { scale: 1.7 }));
++  const after = getSubjectGeometry(next, FLOOR_Y);
++  close(after.anchor.x, before.anchor.x);
++  close(after.anchor.y, before.anchor.y);
++  const explicit = keepPivotOnScaleChange(subject, { scale: 1.7, x: 5 });
++  assert.equal(explicit.x, 5);
++});
++
++test('curseurs de redimensionnement orientés selon le cadre', () => {
++  assert.equal(getResizeCursor('top-center', 0, false), 'ns-resize');
++  assert.equal(getResizeCursor('top-left', 0, false), 'nwse-resize');
++  assert.equal(getResizeCursor('top-right', 0, false), 'nesw-resize');
++  assert.equal(getResizeCursor('top-center', 90, false), 'ew-resize');
++  assert.equal(getResizeCursor('top-center', 45, false), 'nesw-resize');
++  assert.equal(getResizeCursor('top-left', 45, true), 'ew-resize');
++});
++
++const pointOnScreen = (subject, imagePoint) => {
++  const { box, transformSteps } = getSubjectGeometry(subject, FLOOR_Y);
++  return applyStepsToPoint(transformSteps, {
++    x: box.left + imagePoint.x * box.width,
++    y: box.top + imagePoint.y * box.height,
++  });
++};
++
++[0, 30, 90, -120].forEach((rotation) => {
++  [false, true].forEach((flipX) => {
++    test(`ancre de tête à ${rotation}° (miroir ${flipX}) : aller-retour image ↔ écran`, () => {
++      const subject = make('a', { rotation, flipX });
++      const target = { x: 0.62, y: 0.1 };
++      const update = getHeadUpdateForCanvasPoint(subject, FLOOR_Y, pointOnScreen(subject, target));
++      close(update.headAnchor.x, target.x);
++      close(update.headAnchor.y, target.y);
++      const next = apply(subject, update);
++      assertSameSprite(subject, next);
++      close(getSubjectGeometry(next, FLOOR_Y).anchor.x, getSubjectGeometry(subject, FLOOR_Y).anchor.x);
++      const head = getSubjectGeometry(next, FLOOR_Y).head;
++      const expected = pointOnScreen(next, target);
++      close(head.x, expected.x);
++      close(head.y, expected.y);
++    });
++
++    test(`ancre d'appui à ${rotation}° (miroir ${flipX}) : l'image ne bouge pas, le repère suit le pointeur`, () => {
++      const subject = make('a', { rotation, flipX });
++      const target = { x: 0.5, y: 0.9 };
++      const pointer = pointOnScreen(subject, target);
++      const update = getAnchorUpdateForCanvasPoint(subject, FLOOR_Y, pointer);
++      close(update.groundAnchor.x, target.x);
++      close(update.groundAnchor.y, target.y);
++      const next = apply(subject, update);
++      assertSameSprite(subject, next);
++      const anchor = getSubjectGeometry(next, FLOOR_Y).anchor;
++      close(anchor.x, pointer.x);
++      close(anchor.y, pointer.y);
++      close(getSubjectHeightCm(next), getSubjectHeightCm({ ...subject, groundAnchor: update.groundAnchor }));
++    });
++  });
++});
++
++test('ancre d\'appui à 0° : mise à jour historique sans compensation', () => {
++  const subject = make('a');
++  const update = getAnchorUpdateForCanvasPoint(subject, FLOOR_Y, { x: 900, y: 1900 });
++  assert.deepEqual(Object.keys(update).sort(), ['groundAnchor', 'y']);
++});
++
++test('ancres : contraintes anatomiques conservées sur un sujet pivoté', () => {
++  const subject = make('a', { rotation: 45 });
++  const tooHigh = getAnchorUpdateForCanvasPoint(subject, FLOOR_Y, pointOnScreen(subject, { x: 0.4, y: 0.01 }));
++  assert.ok(tooHigh.groundAnchor.y >= subject.headAnchor.y + 0.02 - 1e-9);
++  const headLow = getHeadUpdateForCanvasPoint(subject, FLOOR_Y, pointOnScreen(subject, { x: 0.5, y: 0.99 }));
++  assert.ok(headLow.headAnchor.y <= subject.groundAnchor.y - 0.02 + 1e-9);
++  const outside = getHeadUpdateForCanvasPoint(subject, FLOOR_Y, pointOnScreen(subject, { x: 3, y: 0.3 }));
++  assert.equal(outside.headAnchor.x, 1);
++});
++
++test('sélection : le rectangle pivoté contient son centre et exclut les coins vides de la boîte englobante', () => {
++  const subject = make('a', { rotation: 45 });
++  const { projectedBounds, anchor, visible } = getSubjectGeometry(subject, FLOOR_Y);
++  const inside = (point) => {
++    const local = rotatePoint(point, anchor, -45);
++    return (
++      local.x >= visible.left && local.x <= visible.left + visible.width &&
++      local.y >= visible.top && local.y <= visible.top + visible.height
++    );
++  };
++  const center = rotatePoint({ x: subject.x, y: visible.top + visible.height / 2 }, anchor, 45);
++  assert.equal(inside(center), true);
++  assert.equal(inside({ x: projectedBounds.left + 1, y: projectedBounds.top + 1 }), false);
++  assert.equal(inside({ x: projectedBounds.left + projectedBounds.width - 1, y: projectedBounds.top + 1 }), false);
++});
++
++test('ordre des calques : la priorité reste portée par le zIndex des sujets', () => {
++  const low = make('low', { zIndex: 1, rotation: 20 });
++  const high = make('high', { zIndex: 2, rotation: -20 });
++  const stack = [low, high].sort((a, b) => b.zIndex - a.zIndex);
++  assert.equal(stack[0].id, 'high');
++});
++
++test('empreinte : identique à la zone visible à 0°, englobante pivotée sinon', () => {
++  const flat = make('a');
++  assert.deepEqual(getSubjectFootprint(flat, FLOOR_Y), getSubjectGeometry(flat, FLOOR_Y).visible);
++  const turned = make('a', { rotation: 90 });
++  const geometry = getSubjectGeometry(turned, FLOOR_Y);
++  close(getSubjectFootprint(turned, FLOOR_Y).width, geometry.visible.height);
++  close(getSubjectFootprint(turned, FLOOR_Y).height, geometry.visible.width);
++});
++
++const overlap = (a, b) => {
++  const ra = getSubjectFootprint(a, FLOOR_Y);
++  const rb = getSubjectFootprint(b, FLOOR_Y);
++  return Math.min(ra.left + ra.width, rb.left + rb.width) - Math.max(ra.left, rb.left);
++};
++
++test('auto-organisation : sujets pivotés placés selon leur largeur réelle, sans chevauchement', () => {
++  const subjects = [
++    make('a', { x: 300, rotation: 90 }),
++    make('b', { x: 700, rotation: 45 }),
++    make('c', { x: 1100, rotation: -30, flipX: true }),
++    make('d', { x: 1500 }),
++  ];
++  const { subjects: arranged } = arrangeSubjects(subjects, 'space', { canvasW: 6000, floorY: FLOOR_Y });
++  const sorted = [...arranged].sort(
++    (a, b) => getSubjectFootprint(a, FLOOR_Y).left - getSubjectFootprint(b, FLOOR_Y).left,
++  );
++  for (let i = 0; i < sorted.length - 1; i += 1) {
++    assert.ok(overlap(sorted[i], sorted[i + 1]) <= 1e-6, `${sorted[i].id}/${sorted[i + 1].id}`);
++  }
++  arranged.forEach((subject) => assert.equal(subject.placement, 'auto'));
++});
++
++test('auto-organisation : tri par hauteur indépendant de la rotation', () => {
++  const subjects = [make('a', { scale: 1, rotation: 90 }), make('b', { scale: 2, rotation: 0 })];
++  const { subjects: arranged } = arrangeSubjects(subjects, 'sort-asc', context);
++  const first = [...arranged].sort((a, b) => a.x - b.x)[0];
++  assert.equal(first.id, 'a');
++});
++
++test('centrage : le groupe pivoté est centré sur son empreinte projetée', () => {
++  const subjects = [make('a', { x: 300, rotation: 90 }), make('b', { x: 600, rotation: -45 })];
++  const { subjects: centered } = arrangeSubjects(subjects, 'center', context);
++  const rects = centered.map((subject) => getSubjectFootprint(subject, FLOOR_Y));
++  const left = Math.min(...rects.map((r) => r.left));
++  const right = Math.max(...rects.map((r) => r.left + r.width));
++  close((left + right) / 2, CANVAS_W / 2);
++});
++
++test('mise en page : sujets non pivotés inchangés (positions historiques)', () => {
++  const subjects = [make('a', { x: 100 }), make('b', { x: 200, scale: 1.3 })];
++  const { positions } = layoutRow(subjects, context);
++  const widths = subjects.map((s) => getSubjectGeometry(s, FLOOR_Y).visible.width);
++  const total = widths[0] + widths[1];
++  const gap = Math.min(120, (CANVAS_W - 360 - total) / 1);
++  const start = CANVAS_W / 2 - (total + gap) / 2;
++  assert.equal(positions[0].x, start + widths[0] / 2);
++});
++
++test('import : un sujet existant pivoté repousse le nouveau sujet à droite de son empreinte', () => {
++  const existing = [make('a', { x: 600, rotation: 90, placement: 'manual' })];
++  const created = [make('n', { x: 0 })];
++  const result = layoutOnImport(existing, created, context);
++  const rotatedRect = getSubjectFootprint(existing[0], FLOOR_Y);
++  const added = result.find((subject) => subject.id === 'n');
++  const addedRect = getSubjectFootprint(added, FLOOR_Y);
++  assert.ok(addedRect.left >= rotatedRect.left + rotatedRect.width - 1e-6);
++});
++
++test('cadrage : la composition inclut les coins du sujet pivoté', () => {
++  const subjects = [make('a', { x: 500 }), make('b', { x: 1500, rotation: 90 })];
++  const rect = getCompositionRect(subjects, FLOOR_Y);
++  const { corners } = getSubjectGeometry(subjects[1], FLOOR_Y);
++  corners.forEach((corner) => {
++    assert.ok(corner.x >= rect.left - 1e-6 && corner.x <= rect.left + rect.width + 1e-6);
++    assert.ok(corner.y >= rect.top - 1e-6 && corner.y <= rect.top + rect.height + 1e-6);
++  });
++});
++
++test('cadrage : sujet masqué ignoré, rectangle inchangé à 0°', () => {
++  const flat = make('a');
++  assert.deepEqual(getSubjectRect(flat, FLOOR_Y), getSubjectGeometry(flat, FLOOR_Y).visible);
++  assert.equal(getSubjectRect({ ...flat, visible: false }, FLOOR_Y), null);
++  assert.equal(getBustRect({ ...flat, visible: false }, FLOOR_Y), null);
++});
++
++test('buste : le rectangle suit la tête du sujet pivoté', () => {
++  const subject = make('a', { rotation: 90 });
++  const bust = getBustRect(subject, FLOOR_Y);
++  const { head } = getSubjectGeometry(subject, FLOOR_Y);
++  assert.ok(head.x >= bust.left - 1e-6 && head.x <= bust.left + bust.width + 1e-6);
++  assert.ok(head.y >= bust.top - 1e-6 && head.y <= bust.top + bust.height + 1e-6);
++});
++
++test('angle : normalisation après un geste', () => {
++  close(normalizeAngle(190), -170);
++  close(normalizeAngle(-180), 180);
++});

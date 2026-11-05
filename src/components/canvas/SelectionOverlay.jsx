@@ -1,3 +1,5 @@
+import { getResizeCursor } from '../../domain/transformGesture.js';
+
 const HANDLE_SCREEN_PX = 14;
 const FRAME_SCREEN_PX = 2;
 
@@ -7,7 +9,7 @@ const HANDLES = [
   { type: 'top-right', left: '100%', cursor: 'nesw-resize' },
 ];
 
-const SelectionOverlay = ({ zoom, onResizeStart, showHandles = true }) => {
+const SelectionOverlay = ({ zoom, onResizeStart, showHandles = true, rotation = 0, mirrored = false }) => {
   const handleSize = HANDLE_SCREEN_PX / zoom;
   const frame = FRAME_SCREEN_PX / zoom;
 
@@ -32,7 +34,7 @@ const SelectionOverlay = ({ zoom, onResizeStart, showHandles = true }) => {
             marginTop: -handleSize / 2,
             border: `${frame * 1.5}px solid #10b981`,
             boxSizing: 'border-box',
-            cursor: handle.cursor,
+            cursor: rotation === 0 ? handle.cursor : getResizeCursor(handle.type, rotation, mirrored),
           }}
         />
       ))}
