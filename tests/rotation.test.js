@@ -13,7 +13,7 @@ import {
   unrotatePoint,
 } from '../src/domain/rotation.js';
 import { getSubjectGeometry, getSubjectHeightCm, getHeadAnchor, getGroundAnchor } from '../src/domain/geometry.js';
-import { getAnnotationItems } from '../src/domain/annotations.js';
+import { ANNOTATION_STYLE, getAnnotationItems } from '../src/domain/annotations.js';
 import { createHistoryState, historyReducer } from '../src/hooks/useHistory.js';
 import { areSubjectListsEqual, createSubject } from '../src/domain/subjects.js';
 import { serializeSession, restoreSession } from '../src/services/sessionSnapshot.js';
@@ -265,24 +265,61 @@ test('rotation : le cadre de sélection tourne avec le sujet autour de l\'appui'
   });
 });
 
-test('annotations : pas de ligne de comparaison pour un sujet pivoté, hauteur réelle conservée', () => {
-  const run = (subject) =>
-    getAnnotationItems({
-      subjects: [subject],
-      selectedId: 'a',
-      annotations: { enabled: true, scope: 'selected' },
-      floorY: FLOOR_Y,
-      unit: 'cm',
-    })[0];
+const runAnnotation = (subject, annotations = { enabled: true, scope: 'selected' }) =>
+  getAnnotationItems({ subjects: [subject], selectedId: 'a', annotations, floorY: FLOOR_Y, unit: 'cm' });
 
-  const upright = run(makeSubject());
-  const tilted = run(makeSubject({ rotation: 30 }));
+test('annotations : sujet à 0° inchangé (ligne sur la zone visible, étiquette centrée)', () => {
+  const item = runAnnotation(makeSubject())[0];
+  const { visible, head } = getSubjectGeometry(makeSubject(), FLOOR_Y);
+  assert.equal(item.showLine, true);
+  assert.equal(item.labelX, 700);
+  assert.equal(item.lineY, head.y);
+  assert.equal(item.lineX1, visible.left - ANNOTATION_STYLE.linePadding);
+  assert.equal(item.lineX2, visible.left + visible.width + ANNOTATION_STYLE.linePadding);
+});
 
-  assert.equal(upright.showLine, true);
-  assert.equal(upright.labelX, 700);
-  assert.equal(tilted.showLine, false);
-  assert.equal(tilted.text, upright.text);
-  assert.equal(tilted.labelX, getSubjectGeometry(makeSubject({ rotation: 30 }), FLOOR_Y).head.x);
+[-135, -60, -30, 30, 90, 150, 180].forEach((rotation) => {
+  [false, true].forEach((flipX) => {
+    test(`annotations : la ligne de tête est conservée et suit le repère à ${rotation}° (miroir ${flipX})`, () => {
+      const subject = makeSubject({ rotation, flipX });
+      const upright = runAnnotation(makeSubject({ flipX }))[0];
+      const item = runAnnotation(subject)[0];
+      const geometry = getSubjectGeometry(subject, FLOOR_Y);
+      const { box } = geometry;
+      const expectedHead = applyStepsToPoint(geometry.transformSteps, {
+        x: box.left + subject.headAnchor.x * box.width,
+        y: box.top + subject.headAnchor.y * box.height,
+      });
+
+      assert.equal(item.showLine, true);
+      assert.ok(Math.abs(item.lineY - expectedHead.y) < 1e-6);
+      assert.ok(Math.abs(item.lineY - geometry.head.y) < 1e-6);
+      assert.ok(item.lineX1 < expectedHead.x && item.lineX2 > expectedHead.x);
+      assert.ok(item.lineX1 <= geometry.projectedBounds.left - ANNOTATION_STYLE.linePadding + 1e-6);
+      assert.ok(item.lineX2 >= geometry.projectedBounds.left + geometry.projectedBounds.width + ANNOTATION_STYLE.linePadding - 1e-6);
+      assert.ok(Math.abs(item.labelX - expectedHead.x) < 1e-6);
+      assert.ok(item.labelY <= item.lineY || item.labelY === ANNOTATION_STYLE.fontSize + 8);
+      assert.equal(item.text, upright.text);
+      assert.equal(item.id, 'a');
+    });
+  });
+});
+
+test('annotations : la ligne ne se confond pas avec le haut de la boîte englobante', () => {
+  const subject = makeSubject({ rotation: 30 });
+  const item = runAnnotation(subject)[0];
+  const { projectedBounds, head } = getSubjectGeometry(subject, FLOOR_Y);
+  assert.equal(item.lineY, head.y);
+  assert.ok(item.lineY > projectedBounds.top + 1);
+});
+
+test('annotations : hauteur réelle affichée indépendante de la rotation', () => {
+  const texts = [0, 30, -75, 180].map((rotation) => runAnnotation(makeSubject({ rotation }))[0].text);
+  assert.equal(new Set(texts).size, 1);
+});
+
+test('annotations désactivées : rien n\'est produit, même pour un sujet pivoté', () => {
+  assert.deepEqual(runAnnotation(makeSubject({ rotation: 30 }), { enabled: false, scope: 'all' }), []);
 });
 
 test('création : un nouveau sujet démarre à 0°', () => {

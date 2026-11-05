@@ -27,15 +27,21 @@ export const getAnnotationItems = ({ subjects, selectedId, annotations, floorY, 
     : shown.filter((subject) => subject.id === selectedId);
 
   return targets.map((subject) => {
-    const { visible, head, rotation } = getSubjectGeometry(subject, floorY);
+    const { visible, head, rotation, projectedBounds } = getSubjectGeometry(subject, floorY);
     const rotated = rotation !== 0;
+    const span = rotated
+      ? {
+          left: Math.min(projectedBounds.left, head.x),
+          right: Math.max(projectedBounds.left + projectedBounds.width, head.x),
+        }
+      : { left: visible.left, right: visible.left + visible.width };
     return {
       id: subject.id,
       text: `${subject.name.toUpperCase()} · ${formatHeight(getSubjectHeightCm(subject), unit)}`,
-      showLine: !rotated,
+      showLine: true,
       lineY: head.y,
-      lineX1: visible.left - ANNOTATION_STYLE.linePadding,
-      lineX2: visible.left + visible.width + ANNOTATION_STYLE.linePadding,
+      lineX1: span.left - ANNOTATION_STYLE.linePadding,
+      lineX2: span.right + ANNOTATION_STYLE.linePadding,
       labelX: rotated ? head.x : subject.x,
       labelY: Math.max(ANNOTATION_STYLE.fontSize + 8, head.y - ANNOTATION_STYLE.labelGap),
       emphasized: subject.id === selectedId,

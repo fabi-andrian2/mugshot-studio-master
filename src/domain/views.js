@@ -1,4 +1,5 @@
-import { getSubjectGeometry } from './geometry.js';
+import { getSubjectFootprint, getSubjectGeometry } from './geometry.js';
+import { getBoundsOfPoints, isRotated, rotatePoint } from './rotation.js';
 import { isSubjectVisible } from './appearance.js';
 
 export const MIN_ZOOM = 0.1;
@@ -28,8 +29,19 @@ export const getViewForRect = ({ rect, container, canvas, padding = 0, zoom }) =
   };
 };
 
+const projectRect = (subject, geometry, rect) => {
+  if (!isRotated(subject)) return rect;
+  const corners = [
+    { x: rect.left, y: rect.top },
+    { x: rect.left + rect.width, y: rect.top },
+    { x: rect.left + rect.width, y: rect.top + rect.height },
+    { x: rect.left, y: rect.top + rect.height },
+  ];
+  return getBoundsOfPoints(corners.map((corner) => rotatePoint(corner, geometry.anchor, geometry.rotation)));
+};
+
 export const getSubjectRect = (subject, floorY) =>
-  isSubjectVisible(subject) ? getSubjectGeometry(subject, floorY).visible : null;
+  isSubjectVisible(subject) ? getSubjectFootprint(subject, floorY) : null;
 
 export const getCompositionRect = (subjects, floorY) => {
   const rects = subjects.map((subject) => getSubjectRect(subject, floorY)).filter(Boolean);
@@ -44,11 +56,17 @@ export const getCompositionRect = (subjects, floorY) => {
 };
 
 export const getBustRect = (subject, floorY) => {
-  const rect = getSubjectRect(subject, floorY);
-  if (!rect) return null;
+  if (!isSubjectVisible(subject)) return null;
+  const geometry = getSubjectGeometry(subject, floorY);
+  const rect = geometry.visible;
 
   const height = rect.height * BUST_HEIGHT_RATIO;
   const width = Math.min(rect.width, height * BUST_ASPECT);
 
-  return { left: rect.left + (rect.width - width) / 2, top: rect.top, width, height };
+  return projectRect(subject, geometry, {
+    left: rect.left + (rect.width - width) / 2,
+    top: rect.top,
+    width,
+    height,
+  });
 };

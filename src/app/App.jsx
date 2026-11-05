@@ -10,6 +10,7 @@ import {
 } from "../domain/constants.js";
 import {
   getSubjectGeometry,
+  keepPivotOnScaleChange,
   getMeasuredHeightPx,
   getScaleForGroundToTopPx,
   getAnchorUpdateForCanvasPoint,
@@ -116,7 +117,12 @@ import FormatDialog from "../components/dialogs/FormatDialog.jsx";
 import StatusBar from "../components/status/StatusBar.jsx";
 import { getGridPalette, getGridTone } from "../domain/gridContrast.js";
 import { isForeignPointer } from "../domain/pointerGesture.js";
-import { isRotated } from "../domain/rotation.js";
+import { getRotation } from "../domain/rotation.js";
+import {
+  getResizeDistancePx,
+  getRotationForPointer,
+  startRotationGesture,
+} from "../domain/transformGesture.js";
 
 const HISTORY_OPTIONS = {
   isEqual: areDocumentStatesEqual,
@@ -128,9 +134,18 @@ const isTextField = (el) =>
   el.tagName === "TEXTAREA" || (el.tagName === "INPUT" && el.type !== "range");
 
 const markManual = (upd) =>
-  Object.prototype.hasOwnProperty.call(upd, "x")
+  Object.prototype.hasOwnProperty.call(upd, "x") && !upd.groundAnchor
     ? { ...upd, placement: "manual" }
     : upd;
+
+const withUpdate = (subject, upd) => {
+  const resolved = keepPivotOnScaleChange(subject, upd);
+  return {
+    ...subject,
+    ...markManual(upd),
+    ...(resolved.x === upd.x ? null : { x: resolved.x }),
+  };
+};
 
 const shiftScale = (subject, delta) =>
   clampScale(getMeasuredHeightPx(subject), subject.scale + delta);
@@ -177,6 +192,7 @@ const MugshotStudio = () => {
   const [dragInfo, setDragInfo] = useState(null);
   const [resizeInfo, setResizeInfo] = useState(null);
   const [anchorInfo, setAnchorInfo] = useState(null);
+  const [rotateInfo, setRotateInfo] = useState(null);
   const [isSnapping, setIsSnapping] = useState(false);
 
   const [showSettings, setShowSettings] = useState(false);
@@ -280,8 +296,8 @@ const MugshotStudio = () => {
     };
   }, []);
 
-  const gestureActive = !!dragInfo || !!resizeInfo || !!anchorInfo;
-  const gesturePointerId = (dragInfo ?? resizeInfo ?? anchorInfo)?.pointerId ?? null;
+  const gestureActive = !!dragInfo || !!resizeInfo || !!anchorInfo || !!rotateInfo;
+  const gesturePointerId = (dragInfo ?? resizeInfo ?? anchorInfo ?? rotateInfo)?.pointerId ?? null;
 
   const handleUndo = useCallback(() => {
     if (gestureActive) return;
@@ -298,7 +314,7 @@ const MugshotStudio = () => {
   const updateSubject = useCallback(
     (id, upd) => {
       setLive((list) =>
-        list.map((s) => (s.id === id ? { ...s, ...markManual(upd) } : s)),
+        list.map((s) => (s.id === id ? withUpdate(s, upd) : s)),
       );
     },
     [setLive],
@@ -308,7 +324,7 @@ const MugshotStudio = () => {
     (id, upd, mergeKey) => {
       apply(
         (list) =>
-          list.map((s) => (s.id === id ? { ...s, ...markManual(upd) } : s)),
+          list.map((s) => (s.id === id ? withUpdate(s, upd) : s)),
         mergeKey,
       );
     },
@@ -448,7 +464,6 @@ const MugshotStudio = () => {
     e.stopPropagation();
     e.currentTarget.setPointerCapture(e.pointerId);
     const s = subjects.find((x) => x.id === id);
-    if (isRotated(s)) return;
     const { visible, anchor } = getSubjectGeometry(s, floorY);
     setResizeInfo({
       id,
@@ -462,11 +477,34 @@ const MugshotStudio = () => {
 
   const handleAnchorPointerDown = (e, id, kind) => {
     if (e.button !== 0 || isSpacePressed || isForeignPointer(gesturePointerId, e.pointerId)) return;
-    if (isRotated(subjects.find((x) => x.id === id))) return;
     e.stopPropagation();
     e.currentTarget.setPointerCapture(e.pointerId);
     setSelectedId(id);
     setAnchorInfo({ id, kind, pointerId: e.pointerId });
+  };
+
+  const getCanvasPoint = useCallback(
+    (e) => {
+      const workspace = workspaceRef.current;
+      if (!workspace) return null;
+      const rect = workspace.getBoundingClientRect();
+      return { x: (e.clientX - rect.left) / zoom, y: (e.clientY - rect.top) / zoom };
+    },
+    [zoom],
+  );
+
+  const handleRotatePointerDown = (e, id) => {
+    if (e.button !== 0 || isSpacePressed || isForeignPointer(gesturePointerId, e.pointerId)) return;
+    e.stopPropagation();
+    const s = subjects.find((x) => x.id === id);
+    const point = getCanvasPoint(e);
+    if (!s || !point) return;
+    const { anchor, rotation } = getSubjectGeometry(s, floorY);
+    const gesture = startRotationGesture({ pivot: anchor, point, rotation });
+    if (!gesture) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setSelectedId(id);
+    setRotateInfo({ id, pointerId: e.pointerId, gesture });
   };
 
   const onDragMove = useCallback(
@@ -487,19 +525,25 @@ const MugshotStudio = () => {
       } else if (resizeInfo) {
         const s = subjects.find((x) => x.id === resizeInfo.id);
         if (!s) return;
-        const dy = (resizeInfo.startY - e.clientY) / zoom;
+        const delta = {
+          x: (e.clientX - resizeInfo.startX) / zoom,
+          y: (e.clientY - resizeInfo.startY) / zoom,
+        };
         updateSubject(resizeInfo.id, {
-          scale: getScaleForGroundToTopPx(s, resizeInfo.initH + dy),
+          scale: getScaleForGroundToTopPx(
+            s,
+            getResizeDistancePx(resizeInfo.initH, delta, getRotation(s)),
+          ),
         });
+      } else if (rotateInfo) {
+        const point = getCanvasPoint(e);
+        if (!point) return;
+        const rotation = getRotationForPointer(rotateInfo.gesture, point, { snap: e.shiftKey });
+        if (rotation !== null) updateSubject(rotateInfo.id, { rotation });
       } else if (anchorInfo) {
         const s = subjects.find((x) => x.id === anchorInfo.id);
-        const workspace = workspaceRef.current;
-        if (!s || !workspace) return;
-        const rect = workspace.getBoundingClientRect();
-        const point = {
-          x: (e.clientX - rect.left) / zoom,
-          y: (e.clientY - rect.top) / zoom,
-        };
+        const point = getCanvasPoint(e);
+        if (!s || !point) return;
         const update =
           anchorInfo.kind === "head"
             ? getHeadUpdateForCanvasPoint(s, floorY, point)
@@ -511,6 +555,8 @@ const MugshotStudio = () => {
       dragInfo,
       resizeInfo,
       anchorInfo,
+      rotateInfo,
+      getCanvasPoint,
       gesturePointerId,
       zoom,
       canvasW,
@@ -527,6 +573,7 @@ const MugshotStudio = () => {
       setDragInfo(null);
       setResizeInfo(null);
       setAnchorInfo(null);
+      setRotateInfo(null);
       setIsSnapping(false);
       commit();
     },
@@ -537,6 +584,7 @@ const MugshotStudio = () => {
     setDragInfo(null);
     setResizeInfo(null);
     setAnchorInfo(null);
+    setRotateInfo(null);
     setIsSnapping(false);
     rollback();
   }, [rollback]);
@@ -550,7 +598,7 @@ const MugshotStudio = () => {
   );
 
   useEffect(() => {
-    if (!dragInfo && !resizeInfo && !anchorInfo) return;
+    if (!dragInfo && !resizeInfo && !anchorInfo && !rotateInfo) return;
     window.addEventListener("pointermove", onDragMove);
     window.addEventListener("pointerup", onDragUp);
     window.addEventListener("pointercancel", onPointerCancel);
@@ -559,7 +607,7 @@ const MugshotStudio = () => {
       window.removeEventListener("pointerup", onDragUp);
       window.removeEventListener("pointercancel", onPointerCancel);
     };
-  }, [dragInfo, resizeInfo, anchorInfo, onDragMove, onDragUp, onPointerCancel]);
+  }, [dragInfo, resizeInfo, anchorInfo, rotateInfo, onDragMove, onDragUp, onPointerCancel]);
 
   useEffect(() => {
     const onKey = (e) => {
@@ -991,6 +1039,7 @@ const MugshotStudio = () => {
                 onAnchorStart={(e, kind) =>
                   handleAnchorPointerDown(e, s.id, kind)
                 }
+                onRotateStart={(e) => handleRotatePointerDown(e, s.id)}
               />
             ))}
 

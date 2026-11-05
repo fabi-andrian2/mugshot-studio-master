@@ -1,11 +1,18 @@
-import { getSubjectGeometry, getSubjectHeightCm } from './geometry.js';
+import { getSubjectFootprint, getSubjectHeightCm } from './geometry.js';
+import { isRotated } from './rotation.js';
 
 export const LAYOUT_SIDE_MARGIN = 180;
 export const LAYOUT_MAX_GAP = 120;
 export const LAYOUT_MAX_OVERLAP_RATIO = 0.3;
 export const IMPORT_GAP = 60;
 
-const getVisibleRect = (subject, floorY) => getSubjectGeometry(subject, floorY).visible;
+const getVisibleRect = (subject, floorY) => getSubjectFootprint(subject, floorY);
+
+const getCenterOffset = (subject, floorY) => {
+  if (!isRotated(subject)) return 0;
+  const rect = getVisibleRect(subject, floorY);
+  return rect.left + rect.width / 2 - subject.x;
+};
 
 export const sortSubjects = (subjects, order) => {
   const list = [...subjects];
@@ -22,6 +29,7 @@ export const layoutRow = (ordered, { canvasW, floorY }) => {
   if (ordered.length === 0) return { positions: [], gap: 0, fits: true };
 
   const widths = ordered.map((subject) => getVisibleRect(subject, floorY).width);
+  const offsets = ordered.map((subject) => getCenterOffset(subject, floorY));
   const total = widths.reduce((sum, width) => sum + width, 0);
   const count = ordered.length;
   const available = canvasW - 2 * LAYOUT_SIDE_MARGIN;
@@ -32,7 +40,7 @@ export const layoutRow = (ordered, { canvasW, floorY }) => {
 
   let cursor = canvasW / 2 - (total + gap * (count - 1)) / 2;
   const positions = ordered.map((subject, i) => {
-    const x = cursor + widths[i] / 2;
+    const x = cursor + widths[i] / 2 - offsets[i];
     cursor += widths[i] + gap;
     return { id: subject.id, x };
   });
@@ -81,6 +89,7 @@ export const layoutOnImport = (existing, created, { canvasW, floorY }) => {
   }
 
   const widths = created.map((subject) => getVisibleRect(subject, floorY).width);
+  const offsets = created.map((subject) => getCenterOffset(subject, floorY));
   const rowWidth = widths.reduce((sum, width) => sum + width, 0) + IMPORT_GAP * (created.length - 1);
   const rightEdge = Math.max(
     ...existing.map((subject) => {
@@ -93,7 +102,7 @@ export const layoutOnImport = (existing, created, { canvasW, floorY }) => {
   if (startLeft + rowWidth <= canvasW - LAYOUT_SIDE_MARGIN) {
     let cursor = startLeft;
     const positions = created.map((subject, i) => {
-      const x = cursor + widths[i] / 2;
+      const x = cursor + widths[i] / 2 - offsets[i];
       cursor += widths[i] + IMPORT_GAP;
       return { id: subject.id, x };
     });

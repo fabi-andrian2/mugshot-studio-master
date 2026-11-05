@@ -1,6 +1,7 @@
 import { getSubjectGeometry } from '../../domain/geometry.js';
 import { getSilhouetteStyle, isSubjectVisible } from '../../domain/appearance.js';
 import { stepsToCssTransform } from '../../domain/rotation.js';
+import { ROTATE_HANDLE_OFFSET_SCREEN_PX, getRotationHandle } from '../../domain/transformGesture.js';
 import SelectionOverlay from './SelectionOverlay.jsx';
 
 const MARKER_SCREEN_PX = 30;
@@ -10,17 +11,15 @@ const MARKER_TITLES = {
   head: 'Repère de tête : glisser pour le placer sur le sommet réel du crâne',
 };
 
-const LOCKED_TITLE = 'Déplacement des repères indisponible tant que l\'angle n\'est pas 0°';
-
-const AnchorMarker = ({ kind, point, zoom, onPointerDown, locked }) => {
+const AnchorMarker = ({ kind, point, zoom, onPointerDown }) => {
   const size = MARKER_SCREEN_PX / zoom;
   const color = MARKER_COLORS[kind];
 
   return (
     <div
-      onPointerDown={locked ? undefined : onPointerDown}
-      title={locked ? LOCKED_TITLE : MARKER_TITLES[kind]}
-      className={locked ? 'absolute pointer-events-none' : 'absolute cursor-move'}
+      onPointerDown={onPointerDown}
+      title={MARKER_TITLES[kind]}
+      className="absolute cursor-move"
       style={{
         left: point.x - size / 2,
         top: point.y - size / 2,
@@ -38,6 +37,47 @@ const AnchorMarker = ({ kind, point, zoom, onPointerDown, locked }) => {
   );
 };
 
+const RotationHandle = ({ geometry, subjectX, zoom, onPointerDown }) => {
+  const { base, tip } = getRotationHandle(
+    { subjectX, visible: geometry.visible, anchor: geometry.anchor, rotation: geometry.rotation },
+    ROTATE_HANDLE_OFFSET_SCREEN_PX / zoom,
+  );
+  const hit = 36 / zoom;
+  const dot = 16 / zoom;
+  const stroke = 2 / zoom;
+
+  return (
+    <>
+      <svg
+        width="1"
+        height="1"
+        className="absolute pointer-events-none"
+        style={{ left: 0, top: 0, overflow: 'visible', zIndex: 99999 }}
+      >
+        <line x1={base.x} y1={base.y} x2={tip.x} y2={tip.y} stroke="#34d399" strokeWidth={stroke} />
+      </svg>
+      <div
+        onPointerDown={onPointerDown}
+        title="Faire glisser pour pivoter autour de l'appui (Maj : pas de 15°)"
+        className="absolute flex items-center justify-center"
+        style={{
+          left: tip.x - hit / 2,
+          top: tip.y - hit / 2,
+          width: hit,
+          height: hit,
+          cursor: 'grab',
+          zIndex: 99999,
+        }}
+      >
+        <div
+          className="bg-white rounded-full pointer-events-none"
+          style={{ width: dot, height: dot, border: `${stroke * 1.5}px solid #10b981`, boxSizing: 'border-box' }}
+        />
+      </div>
+    </>
+  );
+};
+
 const SubjectView = ({
   subject,
   floorY,
@@ -49,10 +89,12 @@ const SubjectView = ({
   onDoubleClick,
   onResizeStart,
   onAnchorStart,
+  onRotateStart,
 }) => {
   if (!isSubjectVisible(subject)) return null;
 
-  const { box, visible, originX, anchor, head, rotation, transformSteps } = getSubjectGeometry(subject, floorY);
+  const geometry = getSubjectGeometry(subject, floorY);
+  const { box, visible, originX, anchor, head, rotation, transformSteps, projectedBounds } = geometry;
   const rotated = rotation !== 0;
   const silhouette = getSilhouetteStyle(subject);
 
@@ -110,14 +152,20 @@ const SubjectView = ({
           zIndex: subject.zIndex,
         }}
       >
-        {selected && <SelectionOverlay zoom={zoom} onResizeStart={onResizeStart} showHandles={!rotated} />}
+        {selected && <SelectionOverlay
+            zoom={zoom}
+            onResizeStart={onResizeStart}
+            rotation={rotation}
+            mirrored={rotated && Boolean(subject.flipX)}
+          />}
         {grouped && <SelectionOverlay zoom={zoom} showHandles={false} />}
       </div>
 
       {selected && (
         <>
-          <AnchorMarker kind="head" point={head} zoom={zoom} locked={rotated} onPointerDown={e => onAnchorStart(e, 'head')} />
-          <AnchorMarker kind="ground" point={anchor} zoom={zoom} locked={rotated} onPointerDown={e => onAnchorStart(e, 'ground')} />
+          <AnchorMarker kind="head" point={head} zoom={zoom} onPointerDown={e => onAnchorStart(e, 'head')} />
+          <RotationHandle geometry={geometry} subjectX={subject.x} zoom={zoom} onPointerDown={onRotateStart} />
+          <AnchorMarker kind="ground" point={anchor} zoom={zoom} onPointerDown={e => onAnchorStart(e, 'ground')} />
         </>
       )}
 
@@ -126,9 +174,9 @@ const SubjectView = ({
           <div
             className="absolute pointer-events-none"
             style={{
-              left: visible.left - 40 / zoom,
+              left: (rotated ? projectedBounds : visible).left - 40 / zoom,
               top: anchor.y - 1 / zoom,
-              width: visible.width + 80 / zoom,
+              width: (rotated ? projectedBounds : visible).width + 80 / zoom,
               height: 2 / zoom,
               background: '#10b981',
               zIndex: 99997,

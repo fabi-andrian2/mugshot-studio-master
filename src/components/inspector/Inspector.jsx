@@ -339,8 +339,7 @@ const Inspector = ({
             onCancel={onCancelEdit}
           />
           <p className="text-[11px] text-gray-500 leading-snug">
-            Angle positif : sens horaire. La hauteur réelle ne change pas.
-            {getRotation(subject) !== 0 && ' Redimensionnement à la souris et repères verrouillés tant que l\'angle n\'est pas 0°.'}
+            Angle positif : sens horaire. La hauteur réelle ne change pas. Poignée au-dessus du cadre : Maj = pas de 15°.
           </p>
           <button
             type="button"
