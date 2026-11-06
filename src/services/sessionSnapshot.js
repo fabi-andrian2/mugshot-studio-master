@@ -1,6 +1,7 @@
 import { CANVAS_LIMITS, MIN_HEIGHT_CM, MAX_HEIGHT_CM } from '../domain/constants.js';
 import { normalizeAngle } from '../domain/rotation.js';
 import { isValidColor, normalizeBoardTitle, withFraming } from '../domain/board.js';
+import { LEGACY_SHADOWS, normalizeShadows } from '../domain/shadows.js';
 import { SCHEMA_VERSION } from './persistence.js';
 
 export class SnapshotError extends Error {
@@ -77,7 +78,7 @@ const checkMeasureItem = (item, index) => {
 const checkData = (data) => {
   if (!isObject(data)) return fail('Données de session absentes.');
 
-  const { canvas, unit, board, annotations, mannequin, measure, subjects } = data;
+  const { canvas, unit, board, annotations, shadows, mannequin, measure, subjects } = data;
 
   if (
     !isObject(canvas) ||
@@ -119,6 +120,8 @@ const checkData = (data) => {
   ) {
     return fail('Annotations invalides.');
   }
+
+  if (shadows !== undefined && !isObject(shadows)) return fail('Réglages d\'ombres invalides.');
 
   if (
     !isObject(mannequin) ||
@@ -194,7 +197,7 @@ export const serializeSession = async (state, { fetchBlob = defaultFetchBlob } =
     if (!isObject(state) || !Array.isArray(state.subjects) || !isObject(state.board)) {
       throw new SnapshotError('invalid-state', 'État de session invalide.');
     }
-    const { subjects, board, annotations, mannequin, measure } = state;
+    const { subjects, board, annotations, shadows, mannequin, measure } = state;
     const background = board.background;
     if (!isObject(background)) throw new SnapshotError('invalid-state', 'Fond invalide.');
 
@@ -231,6 +234,7 @@ export const serializeSession = async (state, { fetchBlob = defaultFetchBlob } =
       annotations: isObject(annotations)
         ? { enabled: annotations.enabled, scope: annotations.scope }
         : annotations,
+      ...(isObject(shadows) && { shadows: normalizeShadows(shadows) }),
       mannequin: isObject(mannequin)
         ? { visible: mannequin.visible, heightCm: mannequin.heightCm, x: mannequin.x }
         : mannequin,
@@ -272,7 +276,7 @@ export const restoreSession = async (
     const problem = checkData(snapshot.data);
     if (problem) throw problem;
 
-    const { canvas, unit, board, annotations, mannequin, measure, subjects } = snapshot.data;
+    const { canvas, unit, board, annotations, shadows, mannequin, measure, subjects } = snapshot.data;
     const makeUrl = (blob) => {
       const url = createUrl(blob);
       created.push(url);
@@ -309,6 +313,7 @@ export const restoreSession = async (
           background: { color: board.background.color, image: restoredImage },
         },
         annotations: { enabled: annotations.enabled, scope: annotations.scope },
+        shadows: shadows === undefined ? { ...LEGACY_SHADOWS } : normalizeShadows(shadows),
         mannequin: { visible: mannequin.visible, heightCm: mannequin.heightCm, x: mannequin.x },
         measure: {
           active: false,

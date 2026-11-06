@@ -8,6 +8,7 @@ const useSessionPersistence = ({
   unit,
   board,
   annotations,
+  shadows,
   mannequin,
   measureItems,
   onRestore,
@@ -49,10 +50,11 @@ const useSessionPersistence = ({
       unit,
       board,
       annotations,
+      shadows,
       mannequin,
       measure: { items: measureItems },
     });
-  }, [subjects, canvasW, canvasH, unit, board, annotations, mannequin, measureItems]);
+  }, [subjects, canvasW, canvasH, unit, board, annotations, shadows, mannequin, measureItems]);
 
   useEffect(() => {
     const flush = () => {

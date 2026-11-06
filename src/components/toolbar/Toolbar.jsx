@@ -20,6 +20,7 @@ import {
   Segmented,
 } from "./controls.jsx";
 import BoardMenu from "./BoardMenu.jsx";
+import ShadowMenu from "./ShadowMenu.jsx";
 
 const UNIT_OPTIONS = [
   { value: "cm", label: "CM" },
@@ -87,6 +88,10 @@ const Toolbar = ({
   annotations,
   onToggleAnnotations,
   onScopeChange,
+  shadows,
+  onToggleShadows,
+  onShadowPreset,
+  onShadowChange,
   hasSubjects,
   onArrange,
   onOpenFormat,
@@ -189,6 +194,12 @@ const Toolbar = ({
           title="Annotations : sujet sélectionné ou tous les sujets"
         />
       )}
+      <ShadowMenu
+        shadows={shadows}
+        onToggle={onToggleShadows}
+        onPreset={onShadowPreset}
+        onChange={onShadowChange}
+      />
     </ToolbarGroup>
 
     <Divider />

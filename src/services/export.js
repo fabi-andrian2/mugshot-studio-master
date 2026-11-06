@@ -3,6 +3,7 @@ import { ANNOTATION_STYLE } from '../domain/annotations.js';
 import { MEASURE_STYLE } from '../domain/measure.js';
 import { getSilhouetteStyle } from '../domain/appearance.js';
 import { applyStepsToContext } from '../domain/rotation.js';
+import { SHADOW_CLIP_EXTENT } from '../domain/shadows.js';
 import { DEFAULT_BACKGROUND, getCoverRect } from '../domain/board.js';
 import { getExportSize, getExportLayers } from '../domain/exportPlan.js';
 import loadImage from './loadImage.js';
@@ -75,6 +76,81 @@ const drawSubject = async (ctx, subject, floorY) => {
     source.width = 0;
     source.height = 0;
   }
+};
+
+const createLayer = (width, height) => {
+  const layer = document.createElement('canvas');
+  layer.width = width;
+  layer.height = height;
+  return layer;
+};
+
+const toShadowSilhouette = (img, fade) => {
+  const canvas = createLayer(img.naturalWidth, img.naturalHeight);
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0);
+  ctx.globalCompositeOperation = 'source-in';
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const gradient = ctx.createLinearGradient(0, fade.top * canvas.height, 0, fade.ground * canvas.height);
+  gradient.addColorStop(0, `rgba(0, 0, 0, ${fade.tipAlpha})`);
+  gradient.addColorStop(1, '#000');
+  ctx.globalCompositeOperation = 'destination-in';
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  return canvas;
+};
+
+const compositeLayer = (ctx, layer, { blur, opacity }) => {
+  ctx.save();
+  ctx.filter = `blur(${blur}px)`;
+  ctx.globalAlpha = opacity;
+  ctx.drawImage(layer, 0, 0);
+  ctx.restore();
+};
+
+const drawShadows = async (ctx, shadows, width, height) => {
+  const { style, items } = shadows;
+  const cast = createLayer(width, height);
+  const castCtx = cast.getContext('2d');
+  const contact = createLayer(width, height);
+  const contactCtx = contact.getContext('2d');
+  contactCtx.fillStyle = '#000';
+
+  for (const plan of items) {
+    let img;
+    try {
+      img = await loadImage(plan.url);
+    } catch (error) {
+      throw new Error('Image du sujet illisible (ombre).', { cause: error });
+    }
+    const silhouette = toShadowSilhouette(img, plan.fade);
+    const { a, b, c, d, e, f } = plan.projection;
+
+    castCtx.save();
+    castCtx.transform(a, b, c, d, e, f);
+    castCtx.beginPath();
+    castCtx.rect(-SHADOW_CLIP_EXTENT, -SHADOW_CLIP_EXTENT, 2 * SHADOW_CLIP_EXTENT, SHADOW_CLIP_EXTENT + plan.clipY);
+    castCtx.clip();
+    applyStepsToContext(castCtx, plan.transformSteps);
+    castCtx.drawImage(silhouette, plan.box.left, plan.box.top, plan.box.width, plan.box.height);
+    castCtx.restore();
+
+    silhouette.width = 0;
+    silhouette.height = 0;
+
+    contactCtx.beginPath();
+    contactCtx.ellipse(plan.contact.cx, plan.contact.cy, plan.contact.rx, plan.contact.ry, 0, 0, Math.PI * 2);
+    contactCtx.fill();
+  }
+
+  compositeLayer(ctx, cast, { blur: style.castBlur, opacity: style.castOpacity });
+  compositeLayer(ctx, contact, { blur: style.contactBlur, opacity: style.contactOpacity });
+
+  cast.width = 0;
+  cast.height = 0;
+  contact.width = 0;
+  contact.height = 0;
 };
 
 const drawMannequin = (ctx, geometry) => {
@@ -162,6 +238,7 @@ export const renderBoard = async ({
   measures = [],
   background = DEFAULT_BACKGROUND,
   mannequin = null,
+  shadows = null,
   canvasW,
   canvasH,
   floorY,
@@ -178,12 +255,13 @@ export const renderBoard = async ({
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
 
-  const layers = getExportLayers({ subjects, mannequin, measures, annotations, background });
+  const layers = getExportLayers({ subjects, mannequin, measures, annotations, shadows, background });
 
   for (const layer of layers) {
     if (layer.kind === 'background') await drawBackground(ctx, layer.background, width, height);
     else if (layer.kind === 'grid') await drawGrid(ctx, svgElement, width, height);
     else if (layer.kind === 'mannequin') drawMannequin(ctx, layer.geometry);
+    else if (layer.kind === 'shadows') await drawShadows(ctx, layer.shadows, width, height);
     else if (layer.kind === 'subject') await drawSubject(ctx, layer.subject, floorY);
     else if (layer.kind === 'measures') drawMeasures(ctx, layer.items);
     else if (layer.kind === 'annotations') drawAnnotations(ctx, layer.items);

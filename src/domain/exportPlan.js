@@ -3,7 +3,7 @@ import { getExportableSubjects } from './appearance.js';
 export const MAX_EXPORT_SIDE = 16384;
 export const MAX_EXPORT_AREA = 268435456;
 
-export const EXPORT_LAYER_KINDS = ['background', 'grid', 'mannequin', 'subject', 'measures', 'annotations'];
+export const EXPORT_LAYER_KINDS = ['background', 'grid', 'mannequin', 'shadows', 'subject', 'measures', 'annotations'];
 
 export const getExportSize = (canvasW, canvasH) => {
   if (!Number.isFinite(canvasW) || !Number.isFinite(canvasH) || canvasW <= 0 || canvasH <= 0) {
@@ -27,11 +27,14 @@ export const getExportLayers = ({
   mannequin = null,
   measures = [],
   annotations = [],
+  shadows = null,
   background,
 }) => {
   const layers = [{ kind: 'background', background }, { kind: 'grid' }];
 
   if (mannequin) layers.push({ kind: 'mannequin', geometry: mannequin });
+
+  if (shadows) layers.push({ kind: 'shadows', shadows });
 
   getExportableSubjects(subjects).forEach((subject) => {
     layers.push({ kind: 'subject', subject });

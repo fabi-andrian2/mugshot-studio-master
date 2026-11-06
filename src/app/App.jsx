@@ -20,6 +20,13 @@ import {
   getAnnotationItems,
   DEFAULT_ANNOTATIONS,
 } from "../domain/annotations.js";
+import {
+  DEFAULT_SHADOWS,
+  applyShadowPreset,
+  getShadowPlans,
+  updateShadows,
+} from "../domain/shadows.js";
+import ShadowLayer from "../components/canvas/ShadowLayer.jsx";
 import { clampScale } from "../domain/measurement.js";
 import { arrangeSubjects, layoutOnImport } from "../domain/layout.js";
 import {
@@ -200,6 +207,7 @@ const MugshotStudio = () => {
   const [presentation, setPresentation] = useState(false);
   const [unit, setUnit] = useState("cm");
   const [annotations, setAnnotations] = useState(DEFAULT_ANNOTATIONS);
+  const [shadows, setShadows] = useState(DEFAULT_SHADOWS);
 
   const [board, setBoard] = useState(DEFAULT_BOARD);
   const backgroundImageRef = useRef(null);
@@ -233,6 +241,7 @@ const MugshotStudio = () => {
       setCanvasH(restored.canvasH);
       setUnit(restored.unit);
       setAnnotations(restored.annotations);
+      setShadows(restored.shadows);
       backgroundImageRef.current = restored.board.background.image;
       setBoard(restored.board);
       setMannequin(restored.mannequin);
@@ -253,6 +262,7 @@ const MugshotStudio = () => {
   unit,
   board,
   annotations,
+  shadows,
   mannequin,
   measureItems: measure.items,
   onRestore: handleRestore,
@@ -732,6 +742,10 @@ const MugshotStudio = () => {
   const hintShadow = `0 0 2px ${hintHalo}, 0 0 5px ${hintHalo}, 0 0 12px ${hintHalo}`;
 
   const mannequinGeometry = getMannequinGeometry(mannequin, { floorY, unit });
+  const shadowPlans = useMemo(
+    () => getShadowPlans(subjects, floorY, shadows),
+    [subjects, floorY, shadows],
+  );
 
   const exportCanvas = async () => {
     try {
@@ -742,6 +756,7 @@ const MugshotStudio = () => {
         measures: getMeasureExportItems(measure, unit),
         background: board.background,
         mannequin: mannequinGeometry,
+        shadows: shadowPlans,
         canvasW,
         canvasH,
         floorY,
@@ -926,6 +941,10 @@ const MugshotStudio = () => {
             setAnnotations((a) => ({ ...a, enabled: !a.enabled }))
           }
           onScopeChange={(scope) => setAnnotations((a) => ({ ...a, scope }))}
+          shadows={shadows}
+          onToggleShadows={() => setShadows((s) => updateShadows(s, { enabled: !s.enabled }))}
+          onShadowPreset={(id) => setShadows((s) => applyShadowPreset(s, id))}
+          onShadowChange={(patch) => setShadows((s) => updateShadows(s, patch))}
           hasSubjects={subjects.length > 0}
           onArrange={handleArrange}
           onOpenFormat={() => setShowSettings(true)}
@@ -1021,6 +1040,7 @@ const MugshotStudio = () => {
             />
             <Grid canvasW={canvasW} canvasH={canvasH} showGrid={board.showGrid} background={board.background} title={board.title} />
             <MannequinLayer geometry={mannequinGeometry} canvasW={canvasW} canvasH={canvasH} />
+            <ShadowLayer shadows={shadowPlans} />
 
             {subjects.map((s) => (
               <SubjectView
