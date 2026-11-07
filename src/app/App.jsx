@@ -90,6 +90,30 @@ import BackgroundLayer from "../components/canvas/BackgroundLayer.jsx";
 import MannequinLayer from "../components/canvas/MannequinLayer.jsx";
 import MeasureLayer from '../components/canvas/MeasureLayer.jsx';
 import MeasureOverlay from '../components/canvas/MeasureOverlay.jsx';
+import MeasurePathOverlay from '../components/canvas/MeasurePathOverlay.jsx';
+import {
+  createPathItem,
+  createSegmentItem,
+  addMeasureItem,
+  replaceMeasureItem,
+  setMeasureTicks as setItemsTicks,
+  clampPointToCanvas,
+} from '../domain/measure.js';
+import {
+  getMeasureKind,
+  getMeasureNodes,
+  getMeasureLengthPx,
+  formatMeasureLength as entryLabel,
+  getNearestOnPath,
+  getTickSettings,
+  hasManualHandles,
+  movePoint,
+  moveHandle,
+  insertPoint,
+  removePoint,
+  resetHandles,
+} from '../domain/measurePath.js';
+import { getSubjectGirths, setSubjectGirths } from '../domain/girths.js';
 import { areDocumentStatesEqual, liftMeasureOperation } from '../domain/documentHistory.js';
 import {
   EMPTY_MEASURE_SELECTION,
@@ -98,12 +122,10 @@ import {
   pruneMeasureSelection,
 } from '../domain/measureSelection.js';
 import {
-  addMeasure,
   clearMeasures,
   removeMeasures,
   getMeasureEntries,
   getMeasureExportItems,
-  formatDistance,
   shiftMeasures,
 } from '../domain/measure.js';
 import {
@@ -168,6 +190,7 @@ const MugshotStudio = () => {
     set: setLive,
     apply,
     applyMeasures,
+    setMeasureItems,
     patchMeasures,
     commit,
     rollback,
@@ -215,6 +238,17 @@ const MugshotStudio = () => {
   const [mannequin, setMannequin] = useState(DEFAULT_MANNEQUIN);
   const [measureActive, setMeasureActive] = useState(false);
   const [measureDraft, setMeasureDraft] = useState(null);
+  const [measureTool, setMeasureTool] = useState("segment");
+  const [measureTicks, setMeasureTicksDefault] = useState({ enabled: false, step: null });
+  const [pathDraft, setPathDraftState] = useState(null);
+  const pathDraftRef = useRef(null);
+  const [measureGesture, setMeasureGesture] = useState(null);
+  const [selectedNode, setSelectedNode] = useState(null);
+  const lastTapRef = useRef(null);
+  const updatePathDraft = useCallback((next) => {
+    pathDraftRef.current = next;
+    setPathDraftState(next);
+  }, []);
   const measure = useMemo(
     () => ({ active: measureActive, items: measureItems }),
     [measureActive, measureItems],
@@ -237,6 +271,8 @@ const MugshotStudio = () => {
       setSelectedId(null);
       setSelectedMeasureIds(EMPTY_MEASURE_SELECTION);
       setMeasureDraft(null);
+      updatePathDraft(null);
+      setSelectedNode(null);
       setCanvasW(restored.canvasW);
       setCanvasH(restored.canvasH);
       setUnit(restored.unit);
@@ -247,7 +283,7 @@ const MugshotStudio = () => {
       setMannequin(restored.mannequin);
       setMeasureActive(false);
     },
-    [resetHistory, setSelectedId],
+    [resetHistory, setSelectedId, updatePathDraft],
   );
   const {
   phase,
@@ -306,14 +342,23 @@ const MugshotStudio = () => {
     };
   }, []);
 
-  const gestureActive = !!dragInfo || !!resizeInfo || !!anchorInfo || !!rotateInfo;
-  const gesturePointerId = (dragInfo ?? resizeInfo ?? anchorInfo ?? rotateInfo)?.pointerId ?? null;
+  const gestureActive =
+    !!dragInfo || !!resizeInfo || !!anchorInfo || !!rotateInfo || !!measureGesture;
+  const gesturePointerId =
+    (dragInfo ?? resizeInfo ?? anchorInfo ?? rotateInfo ?? measureGesture)?.pointerId ?? null;
 
   const handleUndo = useCallback(() => {
     if (gestureActive) return;
+    if (pathDraftRef.current) {
+      const draft = pathDraftRef.current;
+      updatePathDraft(
+        draft.nodes.length > 1 ? { nodes: draft.nodes.slice(0, -1), cursor: draft.cursor } : null,
+      );
+      return;
+    }
     setSelectedMeasureIds(EMPTY_MEASURE_SELECTION);
     undo();
-  }, [gestureActive, undo]);
+  }, [gestureActive, undo, updatePathDraft]);
 
   const handleRedo = useCallback(() => {
     if (gestureActive) return;
@@ -517,6 +562,141 @@ const MugshotStudio = () => {
     setRotateInfo({ id, pointerId: e.pointerId, gesture });
   };
 
+  const singleMeasureId = activeMeasureIds.length === 1 ? activeMeasureIds[0] : null;
+  const singleMeasure = useMemo(
+    () => measureItems.find((item) => item.id === singleMeasureId) ?? null,
+    [measureItems, singleMeasureId],
+  );
+  const effectiveNode = useMemo(() => {
+    if (!selectedNode || !singleMeasure || selectedNode.id !== singleMeasure.id) return null;
+    const nodes = getMeasureNodes(singleMeasure);
+    if (selectedNode.index >= nodes.length) return null;
+    return {
+      ...selectedNode,
+      canResetHandles:
+        getMeasureKind(singleMeasure) === "bezier" && hasManualHandles(nodes[selectedNode.index]),
+      canDelete: getMeasureKind(singleMeasure) !== "segment" && nodes.length > 2,
+    };
+  }, [selectedNode, singleMeasure]);
+
+  const isDoubleTap = (id, e, key = "") => {
+    const now = e.timeStamp;
+    const last = lastTapRef.current;
+    const hit =
+      last &&
+      last.id === id &&
+      last.key === key &&
+      now - last.time < 350 &&
+      Math.hypot(e.clientX - last.x, e.clientY - last.y) < 14;
+    lastTapRef.current = hit ? null : { id, key, time: now, x: e.clientX, y: e.clientY };
+    return Boolean(hit);
+  };
+
+  const handleMeasureTrace = (id, additive, e) => {
+    if (isForeignPointer(gesturePointerId, e.pointerId)) return;
+    const item = measureItems.find((it) => it.id === id);
+    const wasSingle = singleMeasureId === id;
+    if (item && wasSingle && !additive && isDoubleTap(id, e, "trace")) {
+      const point = getCanvasPoint(e);
+      const near = point && getNearestOnPath(item, point);
+      if (near && near.distance * zoom <= 14) {
+        const next = insertPoint(item, near.seg, near.t, { x: near.x, y: near.y });
+        if (next !== item) {
+          applyMeasures((items) => replaceMeasureItem({ items }, id, next).items);
+          setSelectedNode({ id, index: near.seg + 1 });
+          return;
+        }
+      }
+    }
+    setSelectedNode(null);
+    handleSelectMeasure(id, additive);
+  };
+
+  const handleMeasureEditStart = (e, id, target) => {
+    if (isForeignPointer(gesturePointerId, e.pointerId) || gestureActive) return;
+    const item = measureItems.find((it) => it.id === id);
+    if (!item) return;
+    if (
+      target.type === "point" &&
+      getMeasureKind(item) === "bezier" &&
+      isDoubleTap(id, e, `node-${target.index}`)
+    ) {
+      const next = resetHandles(item, target.index);
+      if (next !== item) applyMeasures((items) => replaceMeasureItem({ items }, id, next).items);
+      return;
+    }
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    setSelectedNode({ id, index: target.index });
+    setMeasureGesture({ id, target, pointerId: e.pointerId });
+  };
+
+  const handleDeleteNode = useCallback(() => {
+    if (!singleMeasure || !selectedNode) return false;
+    const next = removePoint(singleMeasure, selectedNode.index);
+    if (next === singleMeasure) return false;
+    const id = singleMeasure.id;
+    applyMeasures((items) => replaceMeasureItem({ items }, id, next).items);
+    setSelectedNode(null);
+    return true;
+  }, [singleMeasure, selectedNode, applyMeasures]);
+
+  const handleResetNodeHandles = () => {
+    if (!singleMeasure || !selectedNode) return;
+    const next = resetHandles(singleMeasure, selectedNode.index);
+    if (next === singleMeasure) return;
+    const id = singleMeasure.id;
+    applyMeasures((items) => replaceMeasureItem({ items }, id, next).items);
+  };
+
+  const finishPathDraft = useCallback(() => {
+    const draft = pathDraftRef.current;
+    updatePathDraft(null);
+    if (!draft || draft.nodes.length < 2) return;
+    const item = createPathItem(measureTool, draft.nodes, measureTicks);
+    if (getMeasureLengthPx(item) * zoom < 6) return;
+    applyMeasures(liftMeasureOperation((current) => addMeasureItem(current, item)));
+  }, [measureTool, measureTicks, zoom, applyMeasures, updatePathDraft]);
+
+  const cancelPathDraft = useCallback(() => updatePathDraft(null), [updatePathDraft]);
+
+  const handleToolChange = (tool) => {
+    updatePathDraft(null);
+    setMeasureDraft(null);
+    setSelectedMeasureIds(EMPTY_MEASURE_SELECTION);
+    setMeasureTool(tool);
+    setMeasureActive(true);
+  };
+
+  const handleTicksChange = (next) => {
+    setMeasureTicksDefault(next);
+    if (activeMeasureIds.length > 0) {
+      applyMeasures(liftMeasureOperation((current) => setItemsTicks(current, activeMeasureIds, next)));
+    }
+  };
+
+  const handleDeleteMeasure = (id) => {
+    applyMeasures(liftMeasureOperation((current) => removeMeasures(current, [id])));
+    setSelectedMeasureIds((current) => pruneMeasureSelection(current, measureItems.filter((it) => it.id !== id)));
+  };
+
+  const handleGirthsChange = useCallback(
+    (subjectId, update) => {
+      apply((list) => {
+        let changed = false;
+        const next = list.map((subject) => {
+          if (subject.id !== subjectId) return subject;
+          const current = getSubjectGirths(subject);
+          const updated = update(current);
+          if (updated === current) return subject;
+          changed = true;
+          return setSubjectGirths(subject, updated);
+        });
+        return changed ? next : list;
+      });
+    },
+    [apply],
+  );
+
   const onDragMove = useCallback(
     (e) => {
       if (isForeignPointer(gesturePointerId, e.pointerId)) return;
@@ -550,6 +730,19 @@ const MugshotStudio = () => {
         if (!point) return;
         const rotation = getRotationForPointer(rotateInfo.gesture, point, { snap: e.shiftKey });
         if (rotation !== null) updateSubject(rotateInfo.id, { rotation });
+      } else if (measureGesture) {
+        const raw = getCanvasPoint(e);
+        if (!raw) return;
+        const point = clampPointToCanvas(raw, canvasW, canvasH);
+        const { id, target } = measureGesture;
+        setMeasureItems((items) =>
+          items.map((item) => {
+            if (item.id !== id) return item;
+            return target.type === "point"
+              ? movePoint(item, target.index, point)
+              : moveHandle(item, target.index, target.type, point);
+          }),
+        );
       } else if (anchorInfo) {
         const s = subjects.find((x) => x.id === anchorInfo.id);
         const point = getCanvasPoint(e);
@@ -566,6 +759,9 @@ const MugshotStudio = () => {
       resizeInfo,
       anchorInfo,
       rotateInfo,
+      measureGesture,
+      setMeasureItems,
+      canvasH,
       getCanvasPoint,
       gesturePointerId,
       zoom,
@@ -584,6 +780,7 @@ const MugshotStudio = () => {
       setResizeInfo(null);
       setAnchorInfo(null);
       setRotateInfo(null);
+      setMeasureGesture(null);
       setIsSnapping(false);
       commit();
     },
@@ -595,6 +792,7 @@ const MugshotStudio = () => {
     setResizeInfo(null);
     setAnchorInfo(null);
     setRotateInfo(null);
+    setMeasureGesture(null);
     setIsSnapping(false);
     rollback();
   }, [rollback]);
@@ -608,7 +806,7 @@ const MugshotStudio = () => {
   );
 
   useEffect(() => {
-    if (!dragInfo && !resizeInfo && !anchorInfo && !rotateInfo) return;
+    if (!dragInfo && !resizeInfo && !anchorInfo && !rotateInfo && !measureGesture) return;
     window.addEventListener("pointermove", onDragMove);
     window.addEventListener("pointerup", onDragUp);
     window.addEventListener("pointercancel", onPointerCancel);
@@ -617,7 +815,7 @@ const MugshotStudio = () => {
       window.removeEventListener("pointerup", onDragUp);
       window.removeEventListener("pointercancel", onPointerCancel);
     };
-  }, [dragInfo, resizeInfo, anchorInfo, rotateInfo, onDragMove, onDragUp, onPointerCancel]);
+  }, [dragInfo, resizeInfo, anchorInfo, rotateInfo, measureGesture, onDragMove, onDragUp, onPointerCancel]);
 
   useEffect(() => {
     const onKey = (e) => {
@@ -640,11 +838,35 @@ const MugshotStudio = () => {
 
       if (presentation) return;
       if (e.target.tagName === "INPUT") return;
+
+      if (pathDraftRef.current) {
+        const tag = e.target.tagName;
+        if (e.key === "Escape") {
+          cancelPathDraft();
+          e.preventDefault();
+          return;
+        }
+        if (tag === "BUTTON" || tag === "SELECT") return;
+        if (e.key === "Enter") {
+          finishPathDraft();
+          e.preventDefault();
+          return;
+        }
+        if (e.key === "Backspace") {
+          const draft = pathDraftRef.current;
+          updatePathDraft(
+            draft.nodes.length > 1 ? { nodes: draft.nodes.slice(0, -1), cursor: draft.cursor } : null,
+          );
+          e.preventDefault();
+          return;
+        }
+      }
+
       if (measure.active) return;
 
       if (activeMeasureIds.length > 0) {
         if (e.key === "Delete" || e.key === "Backspace") {
-          deleteSelectedMeasures();
+          if (!handleDeleteNode()) deleteSelectedMeasures();
           e.preventDefault();
           return;
         }
@@ -719,6 +941,10 @@ const MugshotStudio = () => {
     measure.active,
     activeMeasureIds,
     deleteSelectedMeasures,
+    handleDeleteNode,
+    cancelPathDraft,
+    finishPathDraft,
+    updatePathDraft,
     subjects,
     handleUndo,
     handleRedo,
@@ -726,6 +952,37 @@ const MugshotStudio = () => {
     removeSubject,
     removeSelectedSubjects,
   ]);
+
+  const measureEntries = useMemo(
+    () => getMeasureEntries({ active: false, items: measureItems }, unit),
+    [measureItems, unit],
+  );
+
+  const draftItem = useMemo(() => {
+    if (!measure.active) return null;
+    if (measureTool === "segment") {
+      return measureDraft ? createSegmentItem(measureDraft.start, measureDraft.end, measureTicks) : null;
+    }
+    if (!pathDraft || pathDraft.nodes.length === 0) return null;
+    const { nodes, cursor } = pathDraft;
+    const last = nodes[nodes.length - 1];
+    const moved = cursor && (cursor.x !== last.x || cursor.y !== last.y);
+    const list = moved ? [...nodes, cursor] : nodes.length === 1 ? [last, last] : nodes;
+    return createPathItem(measureTool, list, measureTicks);
+  }, [measure.active, measureTool, measureDraft, pathDraft, measureTicks]);
+
+  const draftLabel = draftItem
+    ? entryLabel(draftItem, unit)
+    : "";
+
+  const menuTicks = singleMeasure ? getTickSettings(singleMeasure) : measureTicks;
+
+  const measureHint =
+    measureTool === "segment"
+      ? "Mode mesure · Glisse pour mesurer · Échap pour quitter"
+      : pathDraft
+        ? "Clique pour ajouter · Entrée ou double-clic : terminer · Retour arrière : annuler le dernier point · Échap : annuler"
+        : `Mode mesure (${measureTool === "bezier" ? "courbe" : "polyligne"}) · Clique les points · Échap pour quitter`;
 
   const annotationItems = getAnnotationItems({
     subjects,
@@ -861,6 +1118,7 @@ const MugshotStudio = () => {
         setSelectedId(null);
         setSelectedMeasureIds(EMPTY_MEASURE_SELECTION);
         setMeasureDraft(null);
+        updatePathDraft(null);
         setMeasureActive(false);
       }
       setPresentation(next);
@@ -868,7 +1126,7 @@ const MugshotStudio = () => {
         requestAnimationFrame(() => fitToScreen(canvasW, canvasH)),
       );
     },
-    [setSelectedId, fitToScreen, canvasW, canvasH],
+    [setSelectedId, fitToScreen, canvasW, canvasH, updatePathDraft],
   );
 
   useEffect(() => {
@@ -884,6 +1142,7 @@ const MugshotStudio = () => {
 
   const handleToggleMeasure = () => {
     setMeasureDraft(null);
+    updatePathDraft(null);
     setSelectedMeasureIds(EMPTY_MEASURE_SELECTION);
     setMeasureActive(current => !current);
   };
@@ -892,12 +1151,16 @@ const MugshotStudio = () => {
     setSelectedMeasureIds(EMPTY_MEASURE_SELECTION);
   };
   const handleMeasureComplete = (start, end) =>
-    patchMeasures(liftMeasureOperation(current => addMeasure(current, start, end)));
+    applyMeasures(
+      liftMeasureOperation((current) =>
+        addMeasureItem(current, createSegmentItem(start, end, measureTicks)),
+      ),
+    );
 
   useEffect(() => {
     if (!measure.active) return;
     const onEscape = (e) => {
-      if (e.key !== 'Escape') return;
+      if (e.key !== 'Escape' || e.defaultPrevented || pathDraftRef.current) return;
       setMeasureDraft(null);
       setMeasureActive(false);
     };
@@ -921,6 +1184,7 @@ const MugshotStudio = () => {
           onApply={(w, h) => {
             patchMeasures(liftMeasureOperation(current => shiftMeasures(current, h - canvasH)));
             setMeasureDraft(null);
+            updatePathDraft(null);
             setCanvasW(w);
             setCanvasH(h);
             setShowSettings(false);
@@ -969,6 +1233,35 @@ const MugshotStudio = () => {
           measureCount={measure.items.length}
           onToggleMeasure={handleToggleMeasure}
           onClearMeasures={handleClearMeasures}
+          measureMenu={{
+            tool: measureTool,
+            onToolChange: handleToolChange,
+            ticks: menuTicks,
+            onTicksChange: handleTicksChange,
+            unit,
+            entries: measureEntries,
+            selectedIds: activeMeasureIds,
+            onSelect: (id) => {
+              setSelectedNode(null);
+              handleSelectMeasure(id, false);
+            },
+            onDelete: handleDeleteMeasure,
+            onClear: handleClearMeasures,
+            draft: pathDraft
+              ? {
+                  count: pathDraft.nodes.length,
+                  label: entryLabel(createPathItem(measureTool, pathDraft.nodes.length > 1 ? pathDraft.nodes : [pathDraft.nodes[0], pathDraft.nodes[0]]), unit),
+                }
+              : null,
+            onFinishDraft: finishPathDraft,
+            onCancelDraft: cancelPathDraft,
+            selectedNode: effectiveNode,
+            onDeleteNode: handleDeleteNode,
+            onResetHandles: handleResetNodeHandles,
+            subjects,
+            selectedSubjectId: selectedId,
+            onGirthsChange: handleGirthsChange,
+          }}
           hidden={presentation}
         />
 
@@ -1070,16 +1363,18 @@ const MugshotStudio = () => {
             />
 
             <MeasureLayer
-              entries={getMeasureEntries(measure, unit)}
-              draft={measure.active ? measureDraft : null}
+              entries={measureEntries}
+              draftItem={draftItem}
+              draftLabel={draftLabel}
               unit={unit}
               zoom={zoom}
               isSpacePressed={isSpacePressed}
               canvasW={canvasW}
               canvasH={canvasH}
-              formatDraft={(d, u) => formatDistance(d.start, d.end, u)}
               selectedIds={activeMeasureIds}
-              onSelect={measure.active ? undefined : handleSelectMeasure}
+              selectedNode={effectiveNode}
+              onSelect={measure.active ? undefined : handleMeasureTrace}
+              onEditStart={handleMeasureEditStart}
             />
             {subjects.length === 0 && !dropState && (
               <div
@@ -1106,7 +1401,18 @@ const MugshotStudio = () => {
                 </div>
               </div>
             )}
-            {measure.active && (
+            {measure.active && measureTool !== "segment" && (
+              <MeasurePathOverlay
+                zoom={zoom}
+                canvasW={canvasW}
+                canvasH={canvasH}
+                isSpacePressed={isSpacePressed}
+                draft={pathDraft}
+                onChange={updatePathDraft}
+                onFinish={finishPathDraft}
+              />
+            )}
+            {measure.active && measureTool === "segment" && (
               <MeasureOverlay
                 zoom={zoom}
                 canvasW={canvasW}
@@ -1174,6 +1480,7 @@ const MugshotStudio = () => {
           hiddenCount={hiddenCount}
           selectionLabel={getSelectionCountLabel(selectedIds.length) || getSelectionLabel(active, unit)}
           measureActive={measure.active}
+          measureHint={measureHint}
           canvasW={canvasW}
           canvasH={canvasH}
           hidden={presentation}

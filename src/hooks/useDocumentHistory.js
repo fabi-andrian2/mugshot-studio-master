@@ -21,6 +21,7 @@ const useDocumentHistory = (options) => {
     (updater, mergeKey) => apply(liftMeasureItems(updater), mergeKey),
     [apply],
   );
+  const setMeasureItems = useCallback((updater) => set(liftMeasureItems(updater)), [set]);
   const patchMeasures = useCallback(
     (updater) => patchAll(liftMeasureItems(updater)),
     [patchAll],
@@ -36,6 +37,7 @@ const useDocumentHistory = (options) => {
     set: setSubjects,
     apply: applySubjects,
     applyMeasures,
+    setMeasureItems,
     patchMeasures,
     reset: resetDocument,
     commit: history.commit,

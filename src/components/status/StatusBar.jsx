@@ -9,6 +9,7 @@ const StatusBar = ({
   subjectCount,
   hiddenCount = 0,
   measureActive = false,
+  measureHint,
   selectionLabel,
   canvasW,
   canvasH,
@@ -45,7 +46,7 @@ const StatusBar = ({
       )}
       {measureActive ? (
         <span role="status" className="ml-auto text-amber-400 font-semibold">
-          Mode mesure · Glisse pour mesurer · Échap pour quitter
+          {measureHint ?? 'Mode mesure · Glisse pour mesurer · Échap pour quitter'}
         </span>
       ) : (
         <span className="ml-auto">

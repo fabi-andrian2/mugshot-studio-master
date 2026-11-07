@@ -293,7 +293,9 @@ test('état du document : comparaison des sujets et des mesures', () => {
 
   assert.ok(areDocumentStatesEqual(a, a));
   assert.ok(areDocumentStatesEqual(a, createDocumentState([subjects[0]], ITEMS)));
-  assert.ok(!areDocumentStatesEqual(a, createDocumentState(subjects, [...ITEMS])));
+  // Égalité structurelle : une copie de contenu identique n'est pas un changement.
+  assert.ok(areDocumentStatesEqual(a, createDocumentState(subjects, [...ITEMS])));
+  assert.ok(!areDocumentStatesEqual(a, createDocumentState(subjects, [{ ...ITEMS[0], end: { x: 1, y: 1 } }, ...ITEMS.slice(1)])));
   assert.ok(!areDocumentStatesEqual(a, createDocumentState([make('a', { x: 1 })], ITEMS)));
   assert.ok(areSubjectListsEqual(a.subjects, subjects));
 });

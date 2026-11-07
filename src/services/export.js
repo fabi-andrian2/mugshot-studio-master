@@ -1,6 +1,7 @@
 import { getSubjectGeometry } from '../domain/geometry.js';
 import { ANNOTATION_STYLE } from '../domain/annotations.js';
 import { MEASURE_STYLE } from '../domain/measure.js';
+import { getLabelStride, getTickLabelPlacement } from '../domain/measurePath.js';
 import { getSilhouetteStyle } from '../domain/appearance.js';
 import { applyStepsToContext } from '../domain/rotation.js';
 import { SHADOW_CLIP_EXTENT } from '../domain/shadows.js';
@@ -205,22 +206,55 @@ const drawMeasures = (ctx, items) => {
     ctx.strokeStyle = MEASURE_STYLE.color;
     ctx.lineWidth = MEASURE_STYLE.lineWidth;
     ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
     ctx.beginPath();
-    ctx.moveTo(item.x1, item.y1);
-    ctx.lineTo(item.x2, item.y2);
+    item.path.forEach((p, index) => {
+      if (index === 0) ctx.moveTo(p.x, p.y);
+      else ctx.lineTo(p.x, p.y);
+    });
     ctx.stroke();
 
+    const half = MEASURE_STYLE.tickHalfLength;
+    if (item.ticks.length > 0) {
+      ctx.lineWidth = MEASURE_STYLE.tickLineWidth;
+      ctx.beginPath();
+      item.ticks.forEach((t) => {
+        ctx.moveTo(t.x - t.nx * half, t.y - t.ny * half);
+        ctx.lineTo(t.x + t.nx * half, t.y + t.ny * half);
+      });
+      ctx.stroke();
+    }
+
     ctx.fillStyle = MEASURE_STYLE.color;
-    [[item.x1, item.y1], [item.x2, item.y2]].forEach(([x, y]) => {
+    item.anchors.forEach(({ x, y }) => {
       ctx.beginPath();
       ctx.arc(x, y, MEASURE_STYLE.endpointRadius, 0, Math.PI * 2);
       ctx.fill();
     });
 
-    ctx.font = `bold ${MEASURE_STYLE.fontSize}px ${MEASURE_STYLE.fontFamily}`;
+    ctx.lineJoin = 'round';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'alphabetic';
-    ctx.lineJoin = 'round';
+
+    if (item.ticks.length > 0) {
+      const stride = getLabelStride(item.tickStepPx, 1);
+      ctx.font = `bold ${MEASURE_STYLE.tickFontSize}px ${MEASURE_STYLE.fontFamily}`;
+      ctx.lineWidth = MEASURE_STYLE.haloWidth;
+      item.ticks.forEach((t) => {
+        if (t.index % stride !== 0) return;
+        const place = getTickLabelPlacement(t, MEASURE_STYLE.tickLabelOffset);
+        ctx.textAlign = place.align === 'start' ? 'left' : place.align === 'end' ? 'right' : 'center';
+        ctx.textBaseline = place.baseline;
+        ctx.strokeStyle = MEASURE_STYLE.outlineColor;
+        ctx.strokeText(t.label, place.x, place.y);
+        ctx.fillStyle = MEASURE_STYLE.color;
+        ctx.fillText(t.label, place.x, place.y);
+      });
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'alphabetic';
+    }
+
+    ctx.font = `bold ${MEASURE_STYLE.fontSize}px ${MEASURE_STYLE.fontFamily}`;
     ctx.lineWidth = MEASURE_STYLE.haloWidth;
     ctx.strokeStyle = MEASURE_STYLE.outlineColor;
     ctx.strokeText(item.text, item.labelX, item.labelY);

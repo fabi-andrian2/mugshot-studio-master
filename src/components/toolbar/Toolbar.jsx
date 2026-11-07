@@ -21,6 +21,7 @@ import {
 } from "./controls.jsx";
 import BoardMenu from "./BoardMenu.jsx";
 import ShadowMenu from "./ShadowMenu.jsx";
+import MeasureMenu from "./MeasureMenu.jsx";
 
 const UNIT_OPTIONS = [
   { value: "cm", label: "CM" },
@@ -116,6 +117,7 @@ const Toolbar = ({
   measureCount,
   onToggleMeasure,
   onClearMeasures,
+  measureMenu,
   hidden = false,
 }) => (
   <header className={`${hidden ? "hidden" : "flex"} h-12 border-b border-gray-800 bg-[#111] items-center gap-2 px-3 shrink-0 z-20`}>
@@ -156,14 +158,7 @@ const Toolbar = ({
     <Divider />
 
     <ToolbarGroup>
-      <ToolButton
-        icon={Ruler}
-        label="Mesurer"
-        title="Outil de mesure : glisse sur la planche pour mesurer une distance (Échap pour quitter)"
-        variant={measureActive ? "active" : "ghost"}
-        pressed={measureActive}
-        onClick={onToggleMeasure}
-      />
+      <MeasureMenu active={measureActive} onToggle={onToggleMeasure} {...measureMenu} />
       {measureCount > 0 && (
         <ToolButton
           icon={Eraser}

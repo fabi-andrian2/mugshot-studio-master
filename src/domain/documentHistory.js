@@ -1,9 +1,10 @@
 import { areSubjectListsEqual } from './subjects.js';
+import { areMeasureItemsEqual } from './measurePath.js';
 
 export const createDocumentState = (subjects = [], measureItems = []) => ({ subjects, measureItems });
 
 export const areDocumentStatesEqual = (a, b) =>
-  a === b || (areSubjectListsEqual(a.subjects, b.subjects) && a.measureItems === b.measureItems);
+  a === b || (areSubjectListsEqual(a.subjects, b.subjects) && areMeasureItemsEqual(a.measureItems, b.measureItems));
 
 export const liftSubjects = (updater) => (state) => {
   const next = updater(state.subjects);

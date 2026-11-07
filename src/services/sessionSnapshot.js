@@ -2,6 +2,8 @@ import { CANVAS_LIMITS, MIN_HEIGHT_CM, MAX_HEIGHT_CM } from '../domain/constants
 import { normalizeAngle } from '../domain/rotation.js';
 import { isValidColor, normalizeBoardTitle, withFraming } from '../domain/board.js';
 import { LEGACY_SHADOWS, normalizeShadows } from '../domain/shadows.js';
+import { normalizeGirths } from '../domain/girths.js';
+import { MAX_MEASURE_NODES } from '../domain/measurePath.js';
 import { SCHEMA_VERSION } from './persistence.js';
 
 export class SnapshotError extends Error {
@@ -68,11 +70,71 @@ const checkSubject = (subject, index) => {
   return null;
 };
 
+const isOptionalPoint = (value) => value === undefined || isPoint(value);
+
+const checkNodes = (nodes, at, withHandles) => {
+  if (!Array.isArray(nodes) || nodes.length < 2 || nodes.length > MAX_MEASURE_NODES) {
+    return fail(`${at} : nombre de points invalide.`);
+  }
+  const bad = nodes.some(
+    (n) => !isPoint(n) || (withHandles && !(isOptionalPoint(n.hin) && isOptionalPoint(n.hout))),
+  );
+  return bad ? fail(`${at} : points invalides.`) : null;
+};
+
 const checkMeasureItem = (item, index) => {
   const at = `Mesure ${index + 1}`;
   if (!isObject(item) || !isNum(item.id)) return fail(`${at} : identifiant invalide.`);
-  if (!isPoint(item.start) || !isPoint(item.end)) return fail(`${at} : points invalides.`);
-  return null;
+  if (item.ticks !== undefined) {
+    const t = item.ticks;
+    if (!isObject(t) || typeof t.enabled !== 'boolean' || !(t.step === null || t.step === undefined || isPositive(t.step))) {
+      return fail(`${at} : graduations invalides.`);
+    }
+  }
+  if (item.kind === undefined || item.kind === 'segment') {
+    if (!isPoint(item.start) || !isPoint(item.end)) return fail(`${at} : points invalides.`);
+    return null;
+  }
+  if (item.kind === 'polyline') return checkNodes(item.points, at, false);
+  if (item.kind === 'bezier') return checkNodes(item.nodes, at, true);
+  return fail(`${at} : type inconnu.`);
+};
+
+const pickHandlePoint = (value) => (isPoint(value) ? { x: value.x, y: value.y } : value);
+
+const pickMeasureItem = (item) => {
+  if (!isObject(item)) return item;
+  const ticks = isObject(item.ticks)
+    ? { ticks: { enabled: item.ticks.enabled, step: item.ticks.step ?? null } }
+    : null;
+  if (item.kind === 'polyline') {
+    return {
+      id: item.id,
+      kind: 'polyline',
+      points: Array.isArray(item.points) ? item.points.map(pickPoint) : item.points,
+      ...ticks,
+    };
+  }
+  if (item.kind === 'bezier') {
+    return {
+      id: item.id,
+      kind: 'bezier',
+      nodes: Array.isArray(item.nodes)
+        ? item.nodes.map((n) =>
+            isPoint(n)
+              ? {
+                  x: n.x,
+                  y: n.y,
+                  ...(n.hin !== undefined && { hin: pickHandlePoint(n.hin) }),
+                  ...(n.hout !== undefined && { hout: pickHandlePoint(n.hout) }),
+                }
+              : n,
+          )
+        : item.nodes,
+      ...ticks,
+    };
+  }
+  return { id: item.id, start: pickPoint(item.start), end: pickPoint(item.end), ...ticks };
 };
 
 const checkData = (data) => {
@@ -184,6 +246,7 @@ const copySubjectFields = (subject, blob) => ({
   silhouette: Boolean(subject.silhouette),
   ...(subject.silhouetteColor !== undefined && { silhouetteColor: subject.silhouetteColor }),
   ...(subject.silhouetteOpacity !== undefined && { silhouetteOpacity: subject.silhouetteOpacity }),
+  ...(normalizeGirths(subject.girths).length > 0 && { girths: normalizeGirths(subject.girths) }),
   naturalW: subject.naturalW,
   naturalH: subject.naturalH,
   visibleBounds: pickBounds(subject.visibleBounds),
@@ -240,11 +303,7 @@ export const serializeSession = async (state, { fetchBlob = defaultFetchBlob } =
         : mannequin,
       measure: {
         items: Array.isArray(measure?.items)
-          ? measure.items.map((item) =>
-              isObject(item)
-                ? { id: item.id, start: pickPoint(item.start), end: pickPoint(item.end) }
-                : item,
-            )
+          ? measure.items.map(pickMeasureItem)
           : measure?.items,
       },
       subjects: subjects.map((subject, i) => copySubjectFields(subject, subjectBlobs[i])),
@@ -283,8 +342,9 @@ export const restoreSession = async (
       return url;
     };
 
-    const restoredSubjects = subjects.map(({ blob, ...subject }) => ({
+    const restoredSubjects = subjects.map(({ blob, girths, ...subject }) => ({
       ...subject,
+      ...(normalizeGirths(girths).length > 0 && { girths: normalizeGirths(girths) }),
       rotation: normalizeAngle(subject.rotation),
       visibleBounds: pickBounds(subject.visibleBounds),
       groundAnchor: pickPoint(subject.groundAnchor),
@@ -317,11 +377,7 @@ export const restoreSession = async (
         mannequin: { visible: mannequin.visible, heightCm: mannequin.heightCm, x: mannequin.x },
         measure: {
           active: false,
-          items: measure.items.map((item) => ({
-            id: item.id,
-            start: pickPoint(item.start),
-            end: pickPoint(item.end),
-          })),
+          items: measure.items.map(pickMeasureItem),
         },
       },
     };

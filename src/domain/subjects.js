@@ -2,6 +2,7 @@ import { DEFAULT_SUBJECT_HEIGHT_CM, SUBJECT_STAGGER_PX } from './constants.js';
 import { getGroundAnchor, getHeadAnchor, getMeasuredHeightPx, getSubjectHeightCm } from './geometry.js';
 import { clampScale, formatHeight, scaleFromHeightCm } from './measurement.js';
 import { cleanSubjectName } from './subjectName.js';
+import { areGirthsEqual } from './girths.js';
 
 const MAX_NAME_LENGTH = 60;
 
@@ -9,7 +10,7 @@ const isSameSubject = (a, b) => {
   if (a === b) return true;
   const keysA = Object.keys(a);
   if (keysA.length !== Object.keys(b).length) return false;
-  return keysA.every((key) => a[key] === b[key]);
+  return keysA.every((key) => a[key] === b[key] || (key === 'girths' && areGirthsEqual(a[key], b[key])));
 };
 
 export const areSubjectListsEqual = (a, b) =>

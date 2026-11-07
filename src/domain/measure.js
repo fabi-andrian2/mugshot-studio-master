@@ -1,6 +1,18 @@
 import { CM_TO_PX } from './constants.js';
 import { formatHeight } from './measurement.js';
 import { CANVAS_FONT_FAMILY } from './typography.js';
+import {
+  getMeasureKind,
+  getMeasureNodes,
+  getMeasurePath,
+  getMeasureTicks,
+  getLabelAnchor,
+  formatMeasureLength,
+  isMeasureGeometryValid,
+  translateMeasure,
+  getTickSettings,
+  MAX_MEASURE_NODES,
+} from './measurePath.js';
 
 export const MIN_MEASURE_SCREEN_PX = 6;
 
@@ -17,6 +29,12 @@ export const MEASURE_STYLE = {
   selectionHaloWidth: 8,
   selectionRingRadius: 8,
   hitWidth: 14,
+  tickHalfLength: 5,
+  tickLineWidth: 1.5,
+  tickFontSize: 11,
+  tickLabelOffset: 9,
+  handleRadius: 5,
+  handleHitRadius: 11,
 };
 
 export const DEFAULT_MEASURE = { active: false, items: [] };
@@ -48,6 +66,43 @@ export const addMeasure = (measure, start, end) => {
   return { ...measure, items: [...measure.items, { id: nextId, start, end }] };
 };
 
+// Ajoute une mesure déjà construite (segment, polyligne ou courbe).
+export const addMeasureItem = (measure, item) => {
+  const nextId = measure.items.reduce((max, it) => Math.max(max, it.id), 0) + 1;
+  return { ...measure, items: [...measure.items, { ...item, id: nextId }] };
+};
+
+export const createSegmentItem = (start, end, ticks) => ({
+  start,
+  end,
+  ...(ticks && ticks.enabled ? { ticks: { enabled: true, step: ticks.step ?? null } } : null),
+});
+
+export const createPathItem = (kind, nodes, ticks) => {
+  const clean = nodes.slice(0, MAX_MEASURE_NODES).map((n) => ({ x: n.x, y: n.y }));
+  const base = kind === 'bezier' ? { kind, nodes: clean } : { kind: 'polyline', points: clean };
+  return ticks && ticks.enabled ? { ...base, ticks: { enabled: true, step: ticks.step ?? null } } : base;
+};
+
+export const replaceMeasureItem = (measure, id, item) => {
+  if (!measure.items.some((it) => it.id === id)) return measure;
+  return { ...measure, items: measure.items.map((it) => (it.id === id ? { ...item, id } : it)) };
+};
+
+export const setMeasureTicks = (measure, ids, ticks) => {
+  const targets = new Set(ids);
+  let changed = false;
+  const items = measure.items.map((item) => {
+    if (!targets.has(item.id)) return item;
+    const current = getTickSettings(item);
+    const next = { enabled: ticks.enabled === true, step: ticks.step ?? null };
+    if (current.enabled === next.enabled && current.step === next.step) return item;
+    changed = true;
+    return { ...item, ticks: next };
+  });
+  return changed ? { ...measure, items } : measure;
+};
+
 export const clearMeasures = (measure) =>
   (measure.items.length ? { ...measure, items: [] } : measure);
 
@@ -60,33 +115,41 @@ export const removeMeasures = (measure, ids) => {
 export const getMeasureEntries = (measure, unit) =>
   measure.items.map((item) => ({
     ...item,
-    label: formatDistance(item.start, item.end, unit),
+    kind: getMeasureKind(item),
+    label: formatMeasureLength(item, unit),
+    item,
   }));
 
 export const shiftMeasures = (measure, dy) => {
   if (!Number.isFinite(dy) || dy === 0 || measure.items.length === 0) return measure;
   return {
     ...measure,
-    items: measure.items.map((item) => ({
-      ...item,
-      start: { x: item.start.x, y: item.start.y + dy },
-      end: { x: item.end.x, y: item.end.y + dy },
-    })),
+    items: measure.items.map((item) => translateMeasure(item, 0, dy)),
   };
 };
 
-const isFinitePoint = (point) => Number.isFinite(point?.x) && Number.isFinite(point?.y);
-
 export const getMeasureExportItems = (measure, unit) =>
   getMeasureEntries(measure, unit)
-    .filter((entry) => isFinitePoint(entry.start) && isFinitePoint(entry.end))
-    .map((entry) => ({
-      id: entry.id,
-      x1: entry.start.x,
-      y1: entry.start.y,
-      x2: entry.end.x,
-      y2: entry.end.y,
-      labelX: (entry.start.x + entry.end.x) / 2,
-      labelY: (entry.start.y + entry.end.y) / 2 - MEASURE_STYLE.labelOffset,
-      text: entry.label,
-    }));
+    .filter((entry) => isMeasureGeometryValid(entry.item))
+    .map((entry) => {
+      const nodes = getMeasureNodes(entry.item);
+      const first = nodes[0];
+      const last = nodes[nodes.length - 1];
+      const label = getLabelAnchor(entry.item, MEASURE_STYLE.labelOffset);
+      const { ticks, stepPx } = getMeasureTicks(entry.item, unit);
+      return {
+        id: entry.id,
+        kind: entry.kind,
+        x1: first.x,
+        y1: first.y,
+        x2: last.x,
+        y2: last.y,
+        labelX: label.x,
+        labelY: label.y,
+        text: entry.label,
+        path: getMeasurePath(entry.item).points.map(({ x, y }) => ({ x, y })),
+        anchors: nodes.map(({ x, y }) => ({ x, y })),
+        ticks,
+        tickStepPx: stepPx,
+      };
+    });

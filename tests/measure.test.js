@@ -175,16 +175,14 @@ test('export des mesures : horizontale, coordonnées et libellé centrés', () =
 
   const [item] = getMeasureExportItems(measure, 'cm');
 
-  assert.deepEqual(item, {
-    id: 1,
-    x1: 10,
-    y1: 20,
-    x2: 810,
-    y2: 20,
-    labelX: 410,
-    labelY: 10,
-    text: formatHeight(100, 'cm'),
-  });
+  const { id, x1, y1, x2, y2, labelX, labelY, text } = item;
+  assert.deepEqual(
+    { id, x1, y1, x2, y2, labelX, labelY, text },
+    { id: 1, x1: 10, y1: 20, x2: 810, y2: 20, labelX: 410, labelY: 10, text: formatHeight(100, 'cm') },
+  );
+  assert.equal(item.kind, 'segment');
+  assert.deepEqual(item.path, [{ x: 10, y: 20 }, { x: 810, y: 20 }]);
+  assert.deepEqual(item.ticks, []);
 });
 
 test('export des mesures : verticale', () => {
