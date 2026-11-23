@@ -75,8 +75,8 @@ import useDocumentHistory from "../hooks/useDocumentHistory.js";
 import useCanvasNavigation from "../hooks/useCanvasNavigation.js";
 import useFullscreen from "../hooks/useFullscreen.js";
 import useFileDropZone from "../hooks/useFileDropZone.js";
-import useSessionPersistence from "../hooks/useSessionPersistence.js";
-import SessionNotice from "../components/status/SessionNotice.jsx";
+import useProjectPersistence from "../hooks/useProjectPersistence.js";
+import { canvasToThumbnailBlob } from "../services/thumbnail.js";
 import {
   COMPOSITION_PADDING,
   BUST_PADDING,
@@ -179,7 +179,18 @@ const withUpdate = (subject, upd) => {
 const shiftScale = (subject, delta) =>
   clampScale(getMeasuredHeightPx(subject), subject.scale + delta);
 
-const MugshotStudio = () => {
+const THUMBNAIL_IDLE_MS = 20000;
+
+const MugshotStudio = ({
+  project,
+  saver,
+  saveStatus,
+  controlsRef,
+  onHome,
+  onSaveNow,
+  onRenameProject,
+  onThumbnail,
+}) => {
   const [canvasW, setCanvasW] = useState(DEFAULT_W);
   const [canvasH, setCanvasH] = useState(DEFAULT_H);
   const floorY = canvasH - FLOOR_MARGIN;
@@ -258,12 +269,6 @@ const MugshotStudio = () => {
     [selectedMeasureIds, measureItems],
   );
 
-  useEffect(() => {
-    return () => {
-      releaseBackgroundImage(backgroundImageRef.current);
-    };
-  }, []);
-
   const handleRestore = useCallback(
     (restored) => {
       releaseBackgroundImage(backgroundImageRef.current);
@@ -285,24 +290,22 @@ const MugshotStudio = () => {
     },
     [resetHistory, setSelectedId, updatePathDraft],
   );
-  const {
-  phase,
-  problem,
-  saveStatus,
-  restored,
-  discardSavedSession,
-} = useSessionPersistence({
-  subjects,
-  canvasW,
-  canvasH,
-  unit,
-  board,
-  annotations,
-  shadows,
-  mannequin,
-  measureItems: measure.items,
-  onRestore: handleRestore,
-});
+  useProjectPersistence({
+    saver,
+    initialState: project.initialState,
+    onRestore: handleRestore,
+    snapshot: {
+      subjects,
+      canvasW,
+      canvasH,
+      unit,
+      board,
+      annotations,
+      shadows,
+      mannequin,
+      measureItems: measure.items,
+    },
+  });
   const workspaceRef = useRef(null);
   const containerRef = useRef(null);
 
@@ -819,9 +822,15 @@ const MugshotStudio = () => {
 
   useEffect(() => {
     const onKey = (e) => {
-      if (phase === "loading" || showSettings) return;
+      if (showSettings) return;
       const key = e.key.toLowerCase();
       const mod = e.ctrlKey || e.metaKey;
+
+      if (mod && key === "s" && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        onSaveNow();
+        return;
+      }
 
       if (mod && (key === "z" || key === "y") && !isTextField(e.target)) {
         e.preventDefault();
@@ -931,7 +940,7 @@ const MugshotStudio = () => {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [
-    phase,
+    onSaveNow,
     showSettings,
     presentation,
     selectedId,
@@ -1004,9 +1013,8 @@ const MugshotStudio = () => {
     [subjects, floorY, shadows],
   );
 
-  const exportCanvas = async () => {
-    try {
-      const canvas = await renderBoard({
+  const renderCurrentBoard = () =>
+    renderBoard({
         svgElement: workspaceRef.current?.querySelector(':scope > svg[data-export-grid]'),
         subjects,
         annotations: annotationItems,
@@ -1018,6 +1026,34 @@ const MugshotStudio = () => {
         canvasH,
         floorY,
       });
+
+  const captureThumbnail = async () => {
+    const svg = workspaceRef.current?.querySelector(':scope > svg[data-export-grid]');
+    if (!svg) return null;
+    return canvasToThumbnailBlob(await renderCurrentBoard());
+  };
+
+  useEffect(() => {
+    controlsRef.current = { captureThumbnail };
+  });
+  useEffect(
+    () => () => {
+      controlsRef.current = null;
+    },
+    [controlsRef],
+  );
+
+  useEffect(() => {
+    if (saveStatus.status !== "saved") return undefined;
+    const timer = setTimeout(() => {
+      controlsRef.current?.captureThumbnail().then((blob) => blob && onThumbnail(blob)).catch(() => {});
+    }, THUMBNAIL_IDLE_MS);
+    return () => clearTimeout(timer);
+  }, [saveStatus, onThumbnail, controlsRef]);
+
+  const exportCanvas = async () => {
+    try {
+      const canvas = await renderCurrentBoard();
       const result = await saveCanvasAsPng(canvas);
       if (result.status === "saved") window.alert(`Planche enregistrée : ${result.path}`);
     } catch (err) {
@@ -1170,13 +1206,6 @@ const MugshotStudio = () => {
 
   return (
     <div className="flex flex-col h-screen bg-[#0d0d0d] text-gray-200 font-sans antialiased overflow-hidden select-none">
-      <SessionNotice
-        phase={phase}
-        problem={problem}
-        saveStatus={saveStatus}
-        restored={restored}
-        onDiscard={discardSavedSession}
-      />
       {showSettings && (
         <FormatDialog
           canvasW={canvasW}
@@ -1194,6 +1223,11 @@ const MugshotStudio = () => {
       )}
 
         <Toolbar
+          projectName={project.name}
+          saveStatus={saveStatus}
+          onHome={onHome}
+          onSaveNow={onSaveNow}
+          onRenameProject={onRenameProject}
           canUndo={canUndo}
           canRedo={canRedo}
           onUndo={handleUndo}

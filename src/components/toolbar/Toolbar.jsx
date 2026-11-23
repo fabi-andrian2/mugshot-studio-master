@@ -11,6 +11,7 @@ import {
   EyeOff,
   AlignHorizontalSpaceAround,
   ChevronDown,
+  House,
 } from "lucide-react";
 import {
   ToolbarGroup,
@@ -22,6 +23,8 @@ import {
 import BoardMenu from "./BoardMenu.jsx";
 import ShadowMenu from "./ShadowMenu.jsx";
 import MeasureMenu from "./MeasureMenu.jsx";
+import SaveIndicator from "../status/SaveIndicator.jsx";
+import { MAX_PROJECT_NAME_LENGTH } from "../../domain/projects.js";
 
 const UNIT_OPTIONS = [
   { value: "cm", label: "CM" },
@@ -40,6 +43,66 @@ const ARRANGE_COMMANDS = [
   { id: "sort-desc", label: "Trier par hauteur ↓ décroissante" },
   { id: "floor", label: "Aligner tous les sujets au sol" },
 ];
+
+const ProjectName = ({ name, onRename }) => {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(name);
+  const [error, setError] = useState("");
+
+  const commit = async () => {
+    const value = draft.trim();
+    if (!value || value === name) {
+      setEditing(false);
+      setError("");
+      return;
+    }
+    const result = await onRename(value);
+    if (result.ok) {
+      setEditing(false);
+      setError("");
+    } else {
+      setError(result.message);
+    }
+  };
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        value={draft}
+        maxLength={MAX_PROJECT_NAME_LENGTH}
+        title={error || "Entrée pour valider, Échap pour annuler"}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === "Enter") commit();
+          if (e.key === "Escape") {
+            setEditing(false);
+            setDraft(name);
+            setError("");
+          }
+        }}
+        className={`w-40 bg-[#0d0d0d] border rounded px-2 py-1 text-xs text-white outline-none ${
+          error ? "border-red-600" : "border-emerald-700"
+        }`}
+      />
+    );
+  }
+  return (
+    <button
+      type="button"
+      title="Renommer le projet"
+      onClick={() => {
+        setDraft(name);
+        setEditing(true);
+      }}
+      className="max-w-[11rem] truncate text-xs font-semibold text-gray-200 px-1.5 py-1 rounded hover:bg-[#1c1c1c] transition"
+    >
+      {name}
+    </button>
+  );
+};
 
 const ArrangeMenu = ({ disabled, onArrange }) => {
   const [open, setOpen] = useState(false);
@@ -119,9 +182,19 @@ const Toolbar = ({
   onClearMeasures,
   measureMenu,
   hidden = false,
+  projectName,
+  saveStatus,
+  onHome,
+  onSaveNow,
+  onRenameProject,
 }) => (
   <header className={`${hidden ? "hidden" : "flex"} h-12 border-b border-gray-800 bg-[#111] items-center gap-2 px-3 shrink-0 z-20`}>
-    <div className="flex items-center gap-2 shrink-0 mr-1">
+    <div className="flex items-center gap-1 shrink-0 mr-1">
+      <ToolButton icon={House} title="Accueil — projets" onClick={onHome} />
+      <ProjectName name={projectName} onRename={onRenameProject} />
+      <SaveIndicator status={saveStatus} onRetry={onSaveNow} />
+    </div>
+    <div className="hidden 2xl:flex items-center gap-2 shrink-0 mr-1">
       <Ruler size={17} className="text-emerald-400" />
       <span className="hidden 2xl:inline font-semibold tracking-[0.2em] text-sm whitespace-nowrap">
         MUGSHOT <span className="text-emerald-400">STUDIO</span>

@@ -1,10 +1,11 @@
 import loadImage from './loadImage.js';
+import { createTrackedUrl, revokeTrackedUrl } from './objectUrls.js';
 
 export const loadBackgroundImage = async (file, deps = {}) => {
   const {
     load = loadImage,
-    createUrl = (source) => URL.createObjectURL(source),
-    revokeUrl = (url) => URL.revokeObjectURL(url),
+    createUrl = createTrackedUrl,
+    revokeUrl = revokeTrackedUrl,
   } = deps;
 
   if (!file || !file.type || !file.type.startsWith('image/')) {
@@ -25,5 +26,5 @@ export const loadBackgroundImage = async (file, deps = {}) => {
 };
 
 export const releaseBackgroundImage = (image) => {
-  if (image) URL.revokeObjectURL(image.url);
+  if (image) revokeTrackedUrl(image.url);
 };

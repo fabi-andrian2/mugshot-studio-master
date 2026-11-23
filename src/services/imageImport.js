@@ -1,14 +1,15 @@
 import { analyzeImage } from './imageBounds.js';
 import { partitionDroppedFiles } from '../domain/fileDrop.js';
+import { createTrackedUrl, revokeTrackedUrl } from './objectUrls.js';
 
 const readImageFile = async (file) => {
-  const url = URL.createObjectURL(file);
+  const url = createTrackedUrl(file);
   try {
     const analysis = await analyzeImage(url);
     if (analysis.isEmpty) console.warn(`Image entièrement transparente : ${file.name}`);
     return { id: crypto.randomUUID(), url, fileName: file.name, ...analysis };
   } catch (error) {
-    URL.revokeObjectURL(url);
+    revokeTrackedUrl(url);
     throw error;
   }
 };

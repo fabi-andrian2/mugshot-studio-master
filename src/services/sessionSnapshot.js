@@ -5,6 +5,7 @@ import { LEGACY_SHADOWS, normalizeShadows } from '../domain/shadows.js';
 import { normalizeGirths } from '../domain/girths.js';
 import { MAX_MEASURE_NODES } from '../domain/measurePath.js';
 import { SCHEMA_VERSION } from './persistence.js';
+import { createTrackedUrl, revokeTrackedUrl } from './objectUrls.js';
 
 export class SnapshotError extends Error {
   constructor(code, message, cause) {
@@ -255,6 +256,8 @@ const copySubjectFields = (subject, blob) => ({
   blob,
 });
 
+export const checkSnapshotData = (data) => checkData(data);
+
 export const serializeSession = async (state, { fetchBlob = defaultFetchBlob } = {}) => {
   try {
     if (!isObject(state) || !Array.isArray(state.subjects) || !isObject(state.board)) {
@@ -325,7 +328,7 @@ export const serializeSession = async (state, { fetchBlob = defaultFetchBlob } =
 
 export const restoreSession = async (
   snapshot,
-  { createUrl = (blob) => URL.createObjectURL(blob), revokeUrl = (url) => URL.revokeObjectURL(url) } = {},
+  { createUrl = createTrackedUrl, revokeUrl = revokeTrackedUrl } = {},
 ) => {
   const created = [];
   try {
